@@ -7,7 +7,9 @@ imu_type: "pelvis"    # "torso" or "pelvis"
 lowcmd_topic: "rt/lowcmd"
 lowstate_topic: "rt/lowstate"
 
-policy_path: "/home/deepcyber-mk/Documents/unitree_rl_gym/deploy/deploy_real/bydmimic/policy_zuiwu_48000.onnx"
+# Legacy Unitree-RL-Gym-style config retained for compatibility only.
+# The unified runtime uses ../../configs/g1_beyondmimic.yaml.
+policy_path: "{LEGGED_GYM_ROOT_DIR}/deploy/deploy_real/bydmimic/policy_zuiwu_48000.onnx"
 
 leg_joint2motor_idx: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 # kps: [100, 100, 100, 150, 10, 10, 100, 100, 100, 150, 10, 10]

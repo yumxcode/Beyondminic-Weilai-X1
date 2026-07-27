@@ -1,0 +1,89 @@
+# Unified configuration for BeyondMimic training exports, MuJoCo and Unitree G1.
+runtime:
+  control_dt: 0.02
+  simulation_dt: 0.002
+  simulation_duration: 300.0
+
+policy:
+  path: "${PROJECT_ROOT}/policy_zuiwu_48000.onnx"
+  motion_path: "${PROJECT_ROOT}/dance_zui.npz"
+  num_actions: 29
+  num_observations: 154
+  providers: ["CPUExecutionProvider"]
+
+robot:
+  mjcf_path: "${PROJECT_ROOT}/unitree_description/mjcf/g1_liao.xml"
+  urdf_path: "${PROJECT_ROOT}/unitree_description/urdf/g1/main.urdf"
+  motion_anchor_body_index: 9
+  sim_anchor_body_name: "torso_link"
+  imu_type: "pelvis"
+  message_type: "hg"
+  lowcmd_topic: "rt/lowcmd"
+  lowstate_topic: "rt/lowstate"
+  motor_indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28]
+  joint_names:
+    [left_hip_pitch_joint, left_hip_roll_joint, left_hip_yaw_joint, left_knee_joint,
+     left_ankle_pitch_joint, left_ankle_roll_joint, right_hip_pitch_joint,
+     right_hip_roll_joint, right_hip_yaw_joint, right_knee_joint,
+     right_ankle_pitch_joint, right_ankle_roll_joint, waist_yaw_joint,
+     waist_roll_joint, waist_pitch_joint, left_shoulder_pitch_joint,
+     left_shoulder_roll_joint, left_shoulder_yaw_joint, left_elbow_joint,
+     left_wrist_roll_joint, left_wrist_pitch_joint, left_wrist_yaw_joint,
+     right_shoulder_pitch_joint, right_shoulder_roll_joint,
+     right_shoulder_yaw_joint, right_elbow_joint, right_wrist_roll_joint,
+     right_wrist_pitch_joint, right_wrist_yaw_joint]
+  # Used only when an older ONNX file has no joint_names metadata.
+  policy_joint_names:
+    [left_hip_pitch_joint, right_hip_pitch_joint, waist_yaw_joint,
+     left_hip_roll_joint, right_hip_roll_joint, waist_roll_joint,
+     left_hip_yaw_joint, right_hip_yaw_joint, waist_pitch_joint,
+     left_knee_joint, right_knee_joint, left_shoulder_pitch_joint,
+     right_shoulder_pitch_joint, left_ankle_pitch_joint,
+     right_ankle_pitch_joint, left_shoulder_roll_joint,
+     right_shoulder_roll_joint, left_ankle_roll_joint,
+     right_ankle_roll_joint, left_shoulder_yaw_joint,
+     right_shoulder_yaw_joint, left_elbow_joint, right_elbow_joint,
+     left_wrist_roll_joint, right_wrist_roll_joint,
+     left_wrist_pitch_joint, right_wrist_pitch_joint,
+     left_wrist_yaw_joint, right_wrist_yaw_joint]
+
+# Fallbacks for older ONNX exports. New exports take these values from metadata.
+# All arrays in this section use policy_joint_names order.
+control:
+  stiffness:
+    [40.17923847, 40.17923847, 40.17923847, 99.09842778, 99.09842778,
+     28.5012462, 40.17923847, 40.17923847, 28.5012462, 99.09842778,
+     99.09842778, 14.2506231, 14.2506231, 28.5012462, 28.5012462,
+     14.2506231, 14.2506231, 28.5012462, 28.5012462, 14.2506231,
+     14.2506231, 14.2506231, 14.2506231, 14.2506231, 14.2506231,
+     16.77832748, 16.77832748, 16.77832748, 16.77832748]
+  damping:
+    [2.55788977, 2.55788977, 2.55788977, 6.30880185, 6.30880185,
+     1.81444569, 2.55788977, 2.55788977, 1.81444569, 6.30880185,
+     6.30880185, 0.90722284, 0.90722284, 1.81444569, 1.81444569,
+     0.90722284, 0.90722284, 1.81444569, 1.81444569, 0.90722284,
+     0.90722284, 0.90722284, 0.90722284, 0.90722284, 0.90722284,
+     1.0681415, 1.0681415, 1.0681415, 1.0681415]
+  default_joint_pos:
+    [-0.312, -0.312, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+     0.669, 0.669, 0.2, 0.2, -0.363, -0.363, 0.2, -0.2, 0.0,
+     0.0, 0.0, 0.0, 0.6, 0.6, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  action_scale:
+    [0.5475464463, 0.5475464463, 0.5475464463, 0.3506614566,
+     0.3506614566, 0.4385773242, 0.5475464463, 0.5475464463,
+     0.4385773242, 0.3506614566, 0.3506614566, 0.4385773242,
+     0.4385773242, 0.4385773242, 0.4385773242, 0.4385773242,
+     0.4385773242, 0.4385773242, 0.4385773242, 0.4385773242,
+     0.4385773242, 0.4385773242, 0.4385773242, 0.4385773242,
+     0.4385773242, 0.0745008737, 0.0745008737, 0.0745008737,
+     0.0745008737]
+
+safety:
+  action_clip: 1.0
+  joint_limit_margin_rad: 0.03
+  max_tilt_rad: 0.9
+  max_joint_velocity_rad_s: 35.0
+  start_transition_s: 3.0
+  low_state_timeout_s: 0.2
+  max_control_overrun_count: 10
+  motion_end_behavior: "damping"

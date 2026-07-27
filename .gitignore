@@ -1,0 +1,17 @@
+*.py[cod]
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.venv/
+build/
+dist/
+*.egg-info/
+
+# Isaac Lab / RSL-RL outputs
+logs/
+videos/
+motions/
+wandb/
+
+# Local deployment bundles
+artifacts/

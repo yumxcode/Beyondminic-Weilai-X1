@@ -1,0 +1,3 @@
+# Install this file after installing unitree_sdk2py from Unitree's SDK2 Python repository.
+-e .
+scipy>=1.10
