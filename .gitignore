@@ -10,8 +10,8 @@ dist/
 # Isaac Lab / RSL-RL outputs
 logs/
 videos/
-motions/
 wandb/
 
 # Local deployment bundles
 artifacts/
+.meta-agent/
