@@ -24,6 +24,9 @@ REPO_ROOT = os.path.dirname(SCRIPT_DIR)
 
 
 def main() -> None:
+    # Change working directory to whole_body_tracking/ so relative paths resolve
+    os.chdir(REPO_ROOT)
+
     # Step 1 — install the extension (creates an importable egg-link)
     ext_path = os.path.join(REPO_ROOT, "source", "whole_body_tracking")
     print(f"[entry] pip install -e {ext_path}")

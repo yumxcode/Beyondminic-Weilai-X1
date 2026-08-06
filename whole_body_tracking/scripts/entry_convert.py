@@ -24,6 +24,7 @@ REPO_ROOT = os.path.dirname(SCRIPT_DIR)
 
 
 def main() -> None:
+    os.chdir(REPO_ROOT)
     ext_path = os.path.join(REPO_ROOT, "source", "whole_body_tracking")
     print(f"[entry] pip install -e {ext_path}")
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-e", ext_path])
