@@ -1,0 +1,60 @@
+# Gradmotion Training Task Configuration
+# BeyondMimic G1 29DOF Dance Motion Tracking
+
+project:
+  projectId: "PRO_20260806_013"
+  projectName: "BeyondMimic-G1-Dance"
+  description: "BeyondMimic G1 29DOF dance motion tracking training"
+
+task:
+  taskId: "TASK_20260806_138"
+  taskName: "beyondmimic-g1-dance-v2"
+  status: 5  # finished
+  description: "BeyondMimic G1 29DOF dance tracking - public repo"
+
+resources:
+  goodsId: "ESKU000001"
+  goodsName: "1*4090D*24G"
+  imageId: "BJX00000028"       # IsaacSim:4.5 | IsaacLab:2.1.0
+  imageVersion: "V000127"
+  gpuNum: 1
+
+code:
+  repo: "https://github.com/yumxcode/Beyondminic-Weilai-G1.git"
+  branch: "main"
+  mainCodeUri: "whole_body_tracking/scripts/entry_train.py"
+  startScript: >-
+    gm-run whole_body_tracking/scripts/entry_train.py
+    --task=Tracking-Flat-G1-v0
+    --motion_file motions/dance_zui.npz
+    --headless --num_envs 4096 --max_iterations 5000
+
+training:
+  startTime: "2026-08-06 15:28:19"
+  endTime: "2026-08-06 17:37:22"
+  duration: "~2 hours"
+  iterations: 5000
+  totalTimesteps: 491520000
+  motionFile: "motions/dance_zui.npz"
+  numEnvs: 4096
+
+results:
+  finalReward: 26.04
+  finalEpisodeLength: 472.30
+  error_body_pos: 0.062
+  error_joint_pos: 0.999
+  anchorPosTermination: 0.0
+  bestCheckpoint: 4999
+  modelFile: "trained_models/dance_zui_model_4999.pt"
+
+checkpoints:
+  - 500
+  - 1000
+  - 1500
+  - 2000
+  - 2500
+  - 3000
+  - 3500
+  - 4000
+  - 4500
+  - 4999

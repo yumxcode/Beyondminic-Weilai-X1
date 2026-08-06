@@ -12,6 +12,10 @@ logs/
 videos/
 wandb/
 
-# Local deployment bundles
+# Local deployment bundles (not tracked)
 artifacts/
 .meta-agent/
+
+# Trained models and gradmotion task config (tracked)
+!trained_models/
+!.gm/
