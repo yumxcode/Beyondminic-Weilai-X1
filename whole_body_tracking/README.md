@@ -62,6 +62,50 @@ python -m pip install -e source/whole_body_tracking
 
 ## Motion Tracking
 
+### Dance video to G1 motion (GVHMR + GMR)
+
+The repository can use the following offline pipeline for a monocular dance video:
+
+```text
+video.mp4 -> GVHMR SMPL-X -> GMR Unitree G1 29-DoF -> BeyondMimic CSV -> NPZ
+```
+
+GVHMR, GMR, and Isaac Lab are best kept in separate Python/conda environments. Before running the pipeline, place the
+licensed body models and downloaded GVHMR weights according to `GVHMR/docs/INSTALL.md` and `GMR/README.md`. In
+particular, the bridge requires `GMR/assets/body_models/smplx/SMPLX_NEUTRAL.pkl`.
+
+1. Recover the world-grounded human motion. Use `-s` only when the camera was fixed while recording:
+
+```bash
+conda run -n gvhmr --cwd GVHMR python tools/demo/demo.py \
+  --video=/absolute/path/to/dance.mp4 \
+  --output_root=/absolute/path/to/GVHMR/outputs/demo \
+  -s
+```
+
+2. Retarget the GVHMR result to the G1 and write the 36-column CSV. This bridge is headless and keeps all frames:
+
+```bash
+conda run -n gmr python whole_body_tracking/scripts/gvhmr_to_csv.py \
+  --gvhmr_pred_file GVHMR/outputs/demo/dance/hmr4d_results.pt \
+  --output_file whole_body_tracking/motions/csv/dance_g1.csv
+```
+
+3. In the Isaac Lab environment, generate the maximum-coordinate NPZ consumed by BeyondMimic:
+
+```bash
+python whole_body_tracking/scripts/csv_to_npz.py \
+  --input_file whole_body_tracking/motions/csv/dance_g1.csv \
+  --input_fps 30 \
+  --output_fps 50 \
+  --output_name dance_g1 \
+  --output_file whole_body_tracking/motions/dance_g1.npz \
+  --no_wandb --headless
+```
+
+Replay the CSV in GMR/MuJoCo and the NPZ in Isaac Sim before training. For a first real-robot test, prefer a short clip
+with no jumps, spins, floor contact, or self-contact, and keep a stationary neutral pose at both ends.
+
 ### Motion Preprocessing & Registry Setup
 
 In order to manage the large set of motions we used in this work, we leverage the WandB registry to store and load

@@ -1,0 +1,6 @@
+[submodule "GMR"]
+	path = GMR
+	url = https://github.com/YanjieZe/GMR.git
+[submodule "GVHMR"]
+	path = GVHMR
+	url = https://github.com/zju3dv/GVHMR.git
