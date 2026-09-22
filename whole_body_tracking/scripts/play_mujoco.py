@@ -96,6 +96,91 @@ _DEFAULT_JOINT_POS = {
 
 INIT_HEIGHT = 0.76  # G1_CYLINDER_CFG.init_state.pos[2]
 
+# ─────────────────────────────────────────────────────────────
+#  X1 robot parameters (mirrors robots/x1.py)
+# ─────────────────────────────────────────────────────────────
+
+_NATURAL_FREQ_X1 = 10.0 * 2.0 * np.pi
+_DAMPING_RATIO_X1 = 2.0
+_W2_X1 = _NATURAL_FREQ_X1 ** 2
+
+_ARM_X1 = {
+    "hip_pitch": 0.00760, "hip_roll": 0.01013, "hip_yaw": 0.00887,
+    "knee": 0.02533, "ankle": 0.00887,
+    "lumbar_yaw_roll": 0.01013, "lumbar_pitch": 0.01266,
+    "arm": 0.00253, "wrist": 0.00127,
+}
+
+# joint regex -> (effort_limit, armature)
+_X1_JOINT_CLASS = [
+    (r".*_hip_pitch_joint", 180.0, _ARM_X1["hip_pitch"]),
+    (r".*_hip_roll_joint", 150.0, _ARM_X1["hip_roll"]),
+    (r".*_hip_yaw_joint", 150.0, _ARM_X1["hip_yaw"]),
+    (r".*_knee_pitch_joint", 180.0, _ARM_X1["knee"]),
+    (r".*_ankle_pitch_joint", 80.0, _ARM_X1["ankle"]),
+    (r".*_ankle_roll_joint", 80.0, _ARM_X1["ankle"]),
+    (r"lumbar_yaw_joint", 150.0, _ARM_X1["lumbar_yaw_roll"]),
+    (r"lumbar_roll_joint", 150.0, _ARM_X1["lumbar_yaw_roll"]),
+    (r"lumbar_pitch_joint", 180.0, _ARM_X1["lumbar_pitch"]),
+    (r".*_shoulder_pitch_joint", 20.0, _ARM_X1["arm"]),
+    (r".*_shoulder_roll_joint", 20.0, _ARM_X1["arm"]),
+    (r".*_shoulder_yaw_joint", 20.0, _ARM_X1["arm"]),
+    (r".*_elbow_pitch_joint", 20.0, _ARM_X1["arm"]),
+    (r".*_elbow_yaw_joint", 20.0, _ARM_X1["arm"]),
+    (r".*_wrist_pitch_joint", 10.0, _ARM_X1["wrist"]),
+    (r".*_wrist_roll_joint", 10.0, _ARM_X1["wrist"]),
+]
+
+# X1 default joint positions (home keyframe)
+_X1_DEFAULT_JOINT_POS = {
+    "left_hip_pitch_joint": 0.4889,
+    "left_hip_roll_joint": 0.0621,
+    "left_hip_yaw_joint": -0.3385,
+    "left_knee_pitch_joint": 0.632,
+    "left_ankle_pitch_joint": -0.2722,
+    "right_hip_pitch_joint": -0.4889,
+    "right_hip_roll_joint": -0.0621,
+    "right_hip_yaw_joint": 0.3385,
+    "right_knee_pitch_joint": 0.632,
+    "right_ankle_pitch_joint": -0.2722,
+}
+
+X1_INIT_HEIGHT = 0.61
+
+# X1 npz body order: PhysX BFS over the merged-fixed-joint URDF tree
+X1_NPZ_BODY_ORDER = [
+    "base_link",                     # 0
+    "lumbar_yaw_link",               # 1
+    "left_hip_pitch_link",           # 2
+    "right_hip_pitch_link",          # 3
+    "lumbar_roll_link",              # 4
+    "left_hip_roll_link",            # 5
+    "right_hip_roll_link",           # 6
+    "lumbar_pitch_link",             # 7  <- ANCHOR
+    "left_hip_yaw_link",             # 8
+    "right_hip_yaw_link",            # 9
+    "left_shoulder_pitch_link",      # 10
+    "right_shoulder_pitch_link",     # 11
+    "left_knee_pitch_link",          # 12
+    "right_knee_pitch_link",         # 13
+    "left_shoulder_roll_link",       # 14
+    "right_shoulder_roll_link",      # 15
+    "left_ankle_pitch_link",         # 16
+    "right_ankle_pitch_link",        # 17
+    "left_shoulder_yaw_link",        # 18
+    "right_shoulder_yaw_link",       # 19
+    "left_ankle_roll_link",          # 20
+    "right_ankle_roll_link",         # 21
+    "left_elbow_pitch_link",         # 22
+    "right_elbow_pitch_link",        # 23
+    "left_elbow_yaw_link",           # 24
+    "right_elbow_yaw_link",          # 25
+    "left_wrist_pitch_link",         # 26
+    "right_wrist_pitch_link",        # 27
+    "left_wrist_roll_link",          # 28
+    "right_wrist_roll_link",         # 29
+]
+
 # Sim params (from tracking_env_cfg.py)
 SIM_DT = 0.005       # 200 Hz physics
 DECIMATION = 4       # policy at 50 Hz
@@ -120,6 +205,20 @@ def _match_joint_params(joint_name: str) -> tuple[float, float, float]:
     raise ValueError(f"No matching params for joint: {joint_name}")
 
 
+_ROBOT = "g1"  # set from CLI in main()
+
+
+def _match_joint_params_auto(joint_name: str) -> tuple[float, float, float]:
+    if _ROBOT == "x1":
+        for pattern, effort, armature in _X1_JOINT_CLASS:
+            if _re.fullmatch(pattern, joint_name):
+                kp = armature * _W2_X1
+                kd = 2.0 * _DAMPING_RATIO_X1 * armature * _NATURAL_FREQ_X1
+                return (effort, kp, kd)
+        raise ValueError(f"No matching X1 params for joint: {joint_name}")
+    return _match_joint_params(joint_name)
+
+
 def _match_default_pos(joint_name: str) -> float:
     """Return default position for a joint name."""
     for pattern, pos in _DEFAULT_JOINT_POS.items():
@@ -137,8 +236,10 @@ def build_joint_arrays(joint_names: list[str]):
     action_scale = np.zeros(n)
 
     for i, name in enumerate(joint_names):
-        effort, k_p, k_d = _match_joint_params(name)
-        default_pos[i] = _match_default_pos(name)
+        effort, k_p, k_d = _match_joint_params_auto(name)
+        default_pos[i] = (
+            _X1_DEFAULT_JOINT_POS.get(name, 0.0) if _ROBOT == "x1" else _match_default_pos(name)
+        )
         kp[i] = k_p
         kd[i] = k_d
         # action_scale = 0.25 * effort_limit / stiffness  (from g1.py)
@@ -311,7 +412,15 @@ def main():
                         help="Disable observation normalization")
     parser.add_argument("--seed", type=int, default=None,
                         help="Random seed")
+    parser.add_argument("--robot", choices=["g1", "x1"], default="g1",
+                        help="Robot type (joint gains, defaults, anchor, body order)")
+    parser.add_argument("--headless", action="store_true",
+                        help="No viewer: run metrics-only sim2sim evaluation")
+    parser.add_argument("--max_steps", type=int, default=None,
+                        help="Stop after N policy steps (headless mode)")
     args = parser.parse_args()
+    global _ROBOT
+    _ROBOT = args.robot
 
     if args.seed is not None:
         torch.manual_seed(args.seed)
@@ -321,11 +430,18 @@ def main():
     if args.mjcf is None:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         repo_root = os.path.dirname(script_dir)
-        args.mjcf = os.path.join(
-            repo_root,
-            "source", "whole_body_tracking", "whole_body_tracking",
-            "assets", "unitree_description", "mjcf", "g1.xml",
-        )
+        if args.robot == "x1":
+            args.mjcf = os.path.join(
+                repo_root,
+                "source", "whole_body_tracking", "whole_body_tracking",
+                "assets", "xyber_x1", "mjcf", "xyber_x1_flat.xml",
+            )
+        else:
+            args.mjcf = os.path.join(
+                repo_root,
+                "source", "whole_body_tracking", "whole_body_tracking",
+                "assets", "unitree_description", "mjcf", "g1.xml",
+            )
         print(f"[mjcf] Auto-detected: {args.mjcf}")
 
     # ── Load MuJoCo model ──
@@ -424,8 +540,9 @@ def main():
     # Reset to default position
     mujoco.mj_resetData(model, data)
     
+    init_height = X1_INIT_HEIGHT if args.robot == "x1" else INIT_HEIGHT
     # Set free joint position
-    data.qpos[0:3] = [0.0, 0.0, INIT_HEIGHT]
+    data.qpos[0:3] = [0.0, 0.0, init_height]
     data.qpos[3:7] = [1.0, 0.0, 0.0, 0.0]  # identity quaternion (w,x,y,z)
     data.qvel[0:6] = 0.0
 
@@ -436,7 +553,7 @@ def main():
         data.qvel[adr] = 0.0
 
     mujoco.mj_forward(model, data)
-    print(f"[init] Robot at height {INIT_HEIGHT}m with default joint positions")
+    print(f"[init] Robot at height {init_height}m with default joint positions")
 
     # ── Main playback loop ──
     motion_step = 0
@@ -458,6 +575,88 @@ def main():
     if expected_obs_dim != obs_dim:
         print(f"[WARNING] Obs dimension mismatch! Expected {expected_obs_dim}, policy expects {obs_dim}")
         print("[WARNING] The script may not work correctly. Check joint count and observation terms.")
+
+    # ── Headless metrics mode ─────────────────────────────────────────
+    # Runs the same PD-control loop without a viewer and reports sim2sim
+    # tracking quality: mean body-position error (m), mean joint-position
+    # error (rad), min base height and fall detection.
+    import contextlib
+
+    metrics = {
+        "body_pos_err": [], "joint_pos_err": [], "anchor_pos_err": [],
+        "base_z": [], "steps": 0,
+    }
+
+    def run_steps(n_steps):
+        nonlocal motion_step, last_action
+        for _ in range(n_steps):
+            t = min(motion_step, n_motion_steps - 1)
+            robot_anchor_pos_w = data.xpos[anchor_body_mj_id].copy()
+            robot_anchor_quat_w = data.xquat[anchor_body_mj_id].copy()
+            base_lin_vel = data.qvel[0:3].copy()
+            base_ang_vel = data.qvel[3:6].copy()
+            joint_pos = np.array([data.qpos[adr] for adr in joint_qpos_adr])
+            joint_vel = np.array([data.qvel[adr] for adr in joint_dof_adr])
+            ref_jpos = ref_joint_pos[t]
+            ref_jvel = ref_joint_vel[t]
+            ref_anchor_pos_w = ref_body_pos_w[t, anchor_npz_idx]
+            ref_anchor_quat_w = ref_body_quat_w[t, anchor_npz_idx]
+            obs_command = np.concatenate([ref_jpos, ref_jvel])
+            anchor_pos_b, anchor_quat_b = subtract_frame_transform(
+                robot_anchor_pos_w, robot_anchor_quat_w, ref_anchor_pos_w, ref_anchor_quat_w)
+            rotmat_b = quat_to_rotmat(anchor_quat_b)
+            obs_np = np.concatenate([
+                obs_command, anchor_pos_b, rotmat_b[:, :2].flatten(),
+                base_lin_vel, base_ang_vel,
+                joint_pos - default_pos, joint_vel, last_action,
+            ]).astype(np.float32)
+            with torch.no_grad():
+                action = actor(normalize_obs(torch.from_numpy(obs_np).unsqueeze(0), normalizer)).squeeze(0).numpy().astype(np.float32)
+            last_action = action.copy()
+            target_pos = default_pos + action * action_scale
+            for _sub in range(DECIMATION):
+                joint_pos_now = np.array([data.qpos[adr] for adr in joint_qpos_adr])
+                joint_vel_now = np.array([data.qvel[adr] for adr in joint_dof_adr])
+                tau = kp * (target_pos - joint_pos_now) - kd * joint_vel_now
+                for i in range(len(joint_dof_adr)):
+                    effort_limit, _, _ = _match_joint_params_auto(joint_names_dof[i])
+                    tau[i] = np.clip(tau[i], -effort_limit, effort_limit)
+                data.ctrl[:] = tau
+                mujoco.mj_step(model, data)
+            # metrics
+            metrics["body_pos_err"].append(float(np.mean(np.linalg.norm(
+                data.xpos[[model.body(b).id for b in NPZ_BODY_ORDER]] - ref_body_pos_w[t], axis=1))))
+            metrics["joint_pos_err"].append(float(np.mean(np.abs(
+                np.array([data.qpos[adr] for adr in joint_qpos_adr]) - ref_jpos))))
+            metrics["anchor_pos_err"].append(float(np.linalg.norm(anchor_pos_b)))
+            metrics["base_z"].append(float(data.qpos[2]))
+            metrics["steps"] += 1
+            motion_step += 1
+            if motion_step >= n_motion_steps:
+                print("[playback] motion looped")
+                motion_step = 0
+                last_action = np.zeros(action_dim, dtype=np.float32)
+
+    if args.headless:
+        import json as _json
+
+        total = args.max_steps or n_motion_steps
+        t0 = time.time()
+        run_steps(total)
+        wall = time.time() - t0
+        base_z = np.array(metrics["base_z"])
+        summary = {
+            "robot": args.robot,
+            "steps": metrics["steps"],
+            "wall_s": round(wall, 1),
+            "mean_body_pos_err_m": round(float(np.mean(metrics["body_pos_err"])), 4),
+            "mean_joint_pos_err_rad": round(float(np.mean(metrics["joint_pos_err"])), 4),
+            "mean_anchor_pos_err_m": round(float(np.mean(metrics["anchor_pos_err"])), 4),
+            "min_base_z_m": round(float(base_z.min()), 3),
+            "fall_detected": bool(base_z.min() < 0.30),
+        }
+        print("\n[sim2sim] " + _json.dumps(summary, indent=2))
+        return
 
     print("\n[INFO] Starting MuJoCo playback. Close the viewer window to exit.\n")
 
@@ -545,7 +744,7 @@ def main():
                 tau = kp * (target_pos - joint_pos) - kd * joint_vel
                 # Clamp to effort limits
                 for i, adr in enumerate(joint_dof_adr):
-                    effort_limit, _, _ = _match_joint_params(joint_names_dof[i])
+                    effort_limit, _, _ = _match_joint_params_auto(joint_names_dof[i])
                     tau[i] = np.clip(tau[i], -effort_limit, effort_limit)
                 
                 # Set control torques

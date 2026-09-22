@@ -21,6 +21,38 @@ import numpy as np
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_GMR_ROOT = REPO_ROOT / "GMR"
 
+X1_JOINT_NAMES = (
+    "lumbar_yaw_joint",
+    "lumbar_roll_joint",
+    "lumbar_pitch_joint",
+    "left_shoulder_pitch_joint",
+    "left_shoulder_roll_joint",
+    "left_shoulder_yaw_joint",
+    "left_elbow_pitch_joint",
+    "left_elbow_yaw_joint",
+    "left_wrist_pitch_joint",
+    "left_wrist_roll_joint",
+    "right_shoulder_pitch_joint",
+    "right_shoulder_roll_joint",
+    "right_shoulder_yaw_joint",
+    "right_elbow_pitch_joint",
+    "right_elbow_yaw_joint",
+    "right_wrist_pitch_joint",
+    "right_wrist_roll_joint",
+    "left_hip_pitch_joint",
+    "left_hip_roll_joint",
+    "left_hip_yaw_joint",
+    "left_knee_pitch_joint",
+    "left_ankle_pitch_joint",
+    "left_ankle_roll_joint",
+    "right_hip_pitch_joint",
+    "right_hip_roll_joint",
+    "right_hip_yaw_joint",
+    "right_knee_pitch_joint",
+    "right_ankle_pitch_joint",
+    "right_ankle_roll_joint",
+)
+
 G1_JOINT_NAMES = (
     "left_hip_pitch_joint",
     "left_hip_roll_joint",
@@ -57,6 +89,12 @@ G1_JOINT_NAMES = (
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Retarget GVHMR SMPL-X output to a BeyondMimic G1 CSV."
+    )
+    parser.add_argument(
+        "--robot",
+        choices=["g1", "x1"],
+        default="g1",
+        help="Target robot for the BeyondMimic CSV.",
     )
     parser.add_argument(
         "--gvhmr_pred_file",
@@ -169,10 +207,12 @@ def main() -> None:
     if args.start_frame >= end_frame:
         raise ValueError("The selected frame range is empty")
 
+    robot_name = "xyber_x1" if args.robot == "x1" else "unitree_g1"
+    joint_names_ref = X1_JOINT_NAMES if args.robot == "x1" else G1_JOINT_NAMES
     retargeter = GeneralMotionRetargeting(
         actual_human_height=float(human_height),
         src_human="smplx",
-        tgt_robot="unitree_g1",
+        tgt_robot=robot_name,
         solver=args.solver,
         verbose=False,
         use_velocity_limit=args.use_velocity_limit,
@@ -184,34 +224,55 @@ def main() -> None:
     # MuJoCo reports the floating base as six unnamed velocity DoFs. The motor
     # order is the unambiguous order used by qpos[7:].
     actual_motor_names = tuple(retargeter.robot_motor_names)
-    if actual_motor_names != G1_JOINT_NAMES:
+    expected_order = list(G1_JOINT_NAMES) if args.robot == "g1" else list(X1_JOINT_NAMES)
+    actual_hinge_order = tuple(
+        name for name in retargeter.robot_dof_names if name not in (None, "floating_base")
+    )
+    # GMR MuJoCo models may list DoFs in tree order; remap by name instead of
+    # assuming positional equality for X1.
+    if set(actual_hinge_order) != set(expected_order):
         raise RuntimeError(
-            "GMR G1 motor order does not match BeyondMimic.\n"
-            f"Expected: {G1_JOINT_NAMES}\nActual:   {actual_motor_names}\n"
-            f"Reported DoFs: {actual_joint_names}"
+            f"GMR {robot_name} joint set does not match BeyondMimic.\n"
+            f"Expected: {expected_order}\nActual:   {actual_hinge_order}"
         )
     import mujoco
 
-    qpos_addresses = tuple(
-        int(
-            retargeter.model.jnt_qposadr[
-                mujoco.mj_name2id(retargeter.model, mujoco.mjtObj.mjOBJ_JOINT, name)
-            ]
-        )
-        for name in G1_JOINT_NAMES
-    )
-    if qpos_addresses != tuple(range(7, 36)):
-        raise RuntimeError(
-            "GMR G1 qpos layout does not match BeyondMimic: "
-            f"joint qpos addresses are {qpos_addresses}"
-        )
+    import mujoco as mj
+
+    name_to_qadr = {}
+    for jid in range(retargeter.model.njnt):
+        jname = mj.mj_id2name(retargeter.model, mj.mjtObj.mjOBJ_JOINT, jid)
+        if jname and jname != "floating_base":
+            name_to_qadr[jname] = int(retargeter.model.jnt_qposadr[jid])
+
+    # Reorder the per-frame qpos from GMR's internal joint order into the
+    # canonical CSV column order for the chosen robot.
+    internal_hinge_order = list(actual_hinge_order)
+    remap = [name_to_qadr[name] for name in expected_order]
+
+    # X1 needs an interior-start initialization (knee/elbow ranges start at 0)
+    if args.robot == "x1":
+        init = retargeter.configuration.data.qpos.copy()
+        for jname, qadr in name_to_qadr.items():
+            jid = mj.mj_name2id(retargeter.model, mj.mjtObj.mjOBJ_JOINT, jname)
+            lo, up = retargeter.model.jnt_range[jid]
+            if lo < up:
+                init[qadr] = lo + 0.15 * (up - lo)
+        retargeter.configuration.update(init)
 
     qpos_frames = []
     for index in range(args.start_frame, end_frame):
-        qpos = np.asarray(retargeter.retarget(frames[index]), dtype=np.float64)
+        try:
+            qpos = np.asarray(retargeter.retarget(frames[index]), dtype=np.float64)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[warn] frame {index}: retarget failed ({type(exc).__name__}), freezing pose")
+            qpos_frames.append(qpos_frames[-1].copy())
+            continue
         if qpos.shape != (36,):
-            raise RuntimeError(f"Expected G1 qpos shape (36,), got {qpos.shape} at frame {index}")
-        qpos_frames.append(qpos)
+            raise RuntimeError(f"Expected qpos shape (36,), got {qpos.shape} at frame {index}")
+        reordered = qpos.copy()
+        reordered[7:] = qpos[remap]
+        qpos_frames.append(reordered)
 
     motion = np.stack(qpos_frames).astype(np.float32)
     if not np.all(np.isfinite(motion)):
@@ -229,7 +290,7 @@ def main() -> None:
 
     duration = (len(motion) - 1) / float(aligned_fps) if len(motion) > 1 else 0.0
     print(f"Saved {len(motion)} frames ({duration:.2f}s at {aligned_fps:.3f} FPS) to {output_file}")
-    print("CSV layout verified: root xyz + root quaternion xyzw + 29 G1 joints")
+    print(f"CSV layout verified: root xyz + root quaternion xyzw + 29 {args.robot.upper()} joints")
 
 
 if __name__ == "__main__":

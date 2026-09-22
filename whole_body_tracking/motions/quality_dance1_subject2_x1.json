@@ -1,0 +1,64 @@
+{
+  "frames": 3945,
+  "fps": 30,
+  "ground": {
+    "min_foot_z_m": -0.09018076775787796,
+    "frame": 2541,
+    "pass": false,
+    "threshold_m": -0.015
+  },
+  "self_penetration": {
+    "min_pair_distance_m": -0.1283879147956306,
+    "pair": [
+      "right_wrist_roll_link",
+      "lumbar_pitch_link"
+    ],
+    "frame": 1776,
+    "pass": false,
+    "threshold_m": 0.005
+  },
+  "joint_limits": {
+    "violations": 0,
+    "examples": [],
+    "pass": true
+  },
+  "joint_velocities": {
+    "exceeding": [
+      [
+        "left_wrist_pitch_joint",
+        4.800000600000001,
+        2.5
+      ],
+      [
+        "left_wrist_roll_joint",
+        4.8000006,
+        2.5
+      ],
+      [
+        "right_wrist_pitch_joint",
+        4.800000600000001,
+        2.5
+      ],
+      [
+        "right_wrist_roll_joint",
+        4.800000300000001,
+        2.5
+      ]
+    ],
+    "margin": 1.5,
+    "pass": false
+  },
+  "root_height": {
+    "min_m": 0.3005051,
+    "max_m": 0.71290547,
+    "band": [
+      0.35,
+      1.0
+    ],
+    "pass": false
+  },
+  "continuity": {
+    "pass": true
+  },
+  "PASS": false
+}
