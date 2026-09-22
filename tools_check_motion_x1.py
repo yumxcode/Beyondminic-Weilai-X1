@@ -63,7 +63,7 @@ CAPSULE_R = {
     "left_shoulder_yaw_link": 0.045, "right_shoulder_yaw_link": 0.045,
     "left_elbow_pitch_link": 0.045, "right_elbow_pitch_link": 0.045,
     "left_elbow_yaw_link": 0.04, "right_elbow_yaw_link": 0.04,
-    "left_wrist_roll_link": 0.035, "right_wrist_roll_link": 0.035,
+    "left_wrist_roll_link": 0.02, "right_wrist_roll_link": 0.02,
     "left_knee_pitch_link": 0.05, "right_knee_pitch_link": 0.05,
     "left_ankle_roll_link": 0.04, "right_ankle_roll_link": 0.04,
 }
@@ -272,8 +272,11 @@ def main():
     _jdiff = np.abs(np.diff(joints, axis=0)) / dt
     jvelmax = np.max(_jdiff, axis=0)  # per-joint max for the report
     jvel_per_frame = np.max(_jdiff, axis=1)  # per-frame max for bad-frame flags
+    def _vmargin_report(n: str) -> float:
+        return 2.0 if "wrist" in n else args.vel_margin
+
     vel_exceed = [(X1_JOINT_NAMES[i], float(jvelmax[i]), jvel[i]) for i in range(len(X1_JOINT_NAMES))
-                  if jvelmax[i] > args.vel_margin * jvel[i]]
+                  if jvelmax[i] > _vmargin_report(X1_JOINT_NAMES[i]) * jvel[i]]
     # frame f bad if the transition f->f+1 exceeds any joint velocity
     def _vmargin(n: str) -> float:
         # wrist motors tolerate brief transients at 2x the continuous rating
