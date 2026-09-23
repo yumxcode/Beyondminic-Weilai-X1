@@ -36,8 +36,10 @@ def main() -> None:
     known, train_args = parser.parse_known_args(argv)
 
     ext_path = os.path.join(REPO_ROOT, "source", "whole_body_tracking")
-    print(f"[entry] pip install -e {ext_path}")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-e", ext_path])
+    print(f"[entry] pip install -e {ext_path} --no-deps")
+    # --no-deps: the IsaacLab image already provides every runtime dependency;
+    # letting pip resolve deps would upgrade numpy/scipy and break isaac-sim.
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-e", ext_path, "--no-deps"])
 
     name = known.npz_name or os.path.splitext(os.path.basename(known.motion_file))[0]
     convert_script = os.path.join(SCRIPT_DIR, "csv_to_npz.py")
