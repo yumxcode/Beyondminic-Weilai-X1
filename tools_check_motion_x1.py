@@ -114,10 +114,11 @@ def load_motion(args):
     fps = float(data["fps"])
     body_names = [str(b) for b in data["body_names"]] if "body_names" in data else None
     jp = data["joint_pos"]
-    if body_names is not None:
-        order = [body_names.index("base_link")] if False else None
     base_idx = body_names.index("base_link") if body_names else 0
-    return data["body_pos_w"][:, base_idx], None, jp, fps
+    root_pos = data["body_pos_w"][:, base_idx]
+    root_quat = data["body_quat_w"][:, base_idx]  # wxyz -> xyzw for the FK loop
+    root_quat = root_quat[:, [1, 2, 3, 0]]
+    return root_pos, root_quat, jp, fps
 
 
 def main():

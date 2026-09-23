@@ -28,7 +28,10 @@ def main() -> None:
     # Split args: ours (--motion_csv/--npz_name) vs forwarded train args
     argv = sys.argv[1:]
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--motion_csv", required=True)
+    parser.add_argument("--motion_csv", default=None,
+                        help="Optional: convert this CSV to NPZ before training. Skipped if absent "
+                        "or the NPZ already exists (numpy conflict in the image prevents in-container "
+                        "conversion; prebuild the npz locally with tools_csv_to_npz_x1_local.py).")
     parser.add_argument("--motion_file", required=True)
     parser.add_argument("--npz_name", default=None)
     parser.add_argument("--input_fps", type=int, default=30)
@@ -41,23 +44,29 @@ def main() -> None:
     # letting pip resolve deps would upgrade numpy/scipy and break isaac-sim.
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-e", ext_path, "--no-deps"])
 
-    name = known.npz_name or os.path.splitext(os.path.basename(known.motion_file))[0]
-    convert_script = os.path.join(SCRIPT_DIR, "csv_to_npz.py")
-    convert_cmd = [
-        sys.executable, convert_script,
-        "--robot", "x1",
-        "--input_file", known.motion_csv,
-        "--input_fps", str(known.input_fps),
-        "--output_fps", str(known.output_fps),
-        "--output_name", name,
-        "--output_file", known.motion_file,
-        "--no_wandb",
-        "--headless",
-    ]
-    print(f"[entry] converting: {' '.join(convert_cmd)}")
-    subprocess.check_call(convert_cmd)
-    if not os.path.isfile(known.motion_file):
-        raise FileNotFoundError(f"conversion did not produce {known.motion_file}")
+    if known.motion_csv and not os.path.isfile(known.motion_file):
+        name = known.npz_name or os.path.splitext(os.path.basename(known.motion_file))[0]
+        convert_script = os.path.join(SCRIPT_DIR, "csv_to_npz.py")
+        convert_cmd = [
+            sys.executable, convert_script,
+            "--robot", "x1",
+            "--input_file", known.motion_csv,
+            "--input_fps", str(known.input_fps),
+            "--output_fps", str(known.output_fps),
+            "--output_name", name,
+            "--output_file", known.motion_file,
+            "--no_wandb",
+            "--headless",
+        ]
+        print(f"[entry] converting: {' '.join(convert_cmd)}")
+        subprocess.check_call(convert_cmd)
+        if not os.path.isfile(known.motion_file):
+            raise FileNotFoundError(f"conversion did not produce {known.motion_file}")
+    else:
+        reason = "npz already present" if os.path.isfile(known.motion_file) else "no csv given"
+        print(f"[entry] skipping CSV->NPZ conversion ({reason}); using {known.motion_file}")
+        if not os.path.isfile(known.motion_file):
+            raise FileNotFoundError(known.motion_file)
 
     train_script = os.path.join(SCRIPT_DIR, "rsl_rl", "train.py")
     print(f"[entry] launching {train_script} {' '.join(train_args)}")
