@@ -261,7 +261,10 @@ def load_policy(checkpoint_path: str, device: str = "cpu"):
         obs_dim: int
     """
     ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
-    model_dict = ckpt["model_dict"]
+    # old rsl_rl: model_dict + obs_normalizer; new: model_state_dict + obs_norm_state_dict
+    model_dict = ckpt.get("model_dict") or ckpt.get("model_state_dict")
+    if model_dict is None:
+        raise KeyError(f"no model weights in checkpoint: {list(ckpt.keys())}")
 
     # Extract actor weights — keys like "actor.0.weight", "actor.0.bias", etc.
     actor_layers = OrderedDict()
@@ -308,20 +311,21 @@ def load_policy(checkpoint_path: str, device: str = "cpu"):
     print(f"[policy] Actor MLP: {obs_dim} → {ACTOR_HIDDEN_DIMS} → {action_dim}")
     print(f"[policy] {len(layers)} linear layers")
 
-    # Load empirical normalization
+    # Load empirical normalization (both rsl_rl layouts)
     normalizer = None
-    if "obs_normalizer" in ckpt and ckpt["obs_normalizer"] is not None:
-        norm_state = ckpt["obs_normalizer"]
-        if isinstance(norm_state, dict):
-            mean = torch.tensor(norm_state.get("mean", np.zeros(obs_dim)), dtype=torch.float32)
-            var = torch.tensor(norm_state.get("var", np.ones(obs_dim)), dtype=torch.float32)
+    norm_state = ckpt.get("obs_normalizer") or ckpt.get("obs_norm_state_dict")
+    if isinstance(norm_state, dict):
+        mean_np = norm_state.get("mean", norm_state.get("_mean"))
+        var_np = norm_state.get("var", norm_state.get("_var"))
+        if mean_np is not None and var_np is not None:
+            mean = torch.tensor(np.asarray(mean_np), dtype=torch.float32)
+            var = torch.tensor(np.asarray(var_np), dtype=torch.float32)
             count = norm_state.get("count", 0)
-            eps = 1e-6
-            std = torch.sqrt(var + eps)
+            std = torch.sqrt(var + 1e-6)
             normalizer = (mean.to(device), std.to(device))
             print(f"[policy] Empirical normalization: count={count}")
         else:
-            print("[policy] Warning: unrecognized normalizer format, skipping")
+            print("[policy] Warning: normalizer dict missing mean/var, skipping")
     else:
         print("[policy] No normalizer found in checkpoint")
 
@@ -465,6 +469,34 @@ def main():
 
     # Build per-joint arrays
     default_pos, kp, kd, action_scale = build_joint_arrays(joint_names_dof)
+
+    # Align MuJoCo joint dynamics with the IsaacLab training model: the X1
+    # MJCF carries vendor damping/frictionloss and no armature, while training
+    # (URDF) used zero damping/friction and IsaacLab-configured armature.
+    # Ultra-light wrist joints without armature destabilize the PD loop.
+    if args.robot == "x1":
+        for _i, _nm in enumerate(joint_names_dof):
+            for _pat, _effort, _arm in _X1_JOINT_CLASS:
+                import re as _re2
+                if _re2.fullmatch(_pat, _nm):
+                    _dadr = model.jnt_dofadr[model.joint(_nm).id]
+                    model.dof_armature[_dadr] = _arm
+                    model.dof_damping[_dadr] = 0.0
+                    model.dof_frictionloss[_dadr] = 0.0
+                    break
+        print("[dynamics] X1 armature/damping aligned with IsaacLab training model")
+
+    # Actuator transmission map: MuJoCo actuator order (legs, lumbar, arms in
+    # the X1 MJCF) differs from the joint tree order (lumbar, arms, legs).
+    # Route each computed torque to the actuator that actually drives its joint.
+    _act_for_joint = []
+    for _name in joint_names_dof:
+        _jid = model.joint(_name).id
+        _matches = np.where(model.actuator_trnid[:, 0] == _jid)[0]
+        assert len(_matches) == 1, f"joint {_name}: {len(_matches)} actuators"
+        _act_for_joint.append(int(_matches[0]))
+    _act_for_joint = np.array(_act_for_joint)
+    print(f"[ctrl] actuator map ok (first: {joint_names_dof[0]} -> act {_act_for_joint[0]})")
     print(f"[mjoco] Default pos: {default_pos}")
     print(f"[mjoco] KP range: [{kp.min():.2f}, {kp.max():.2f}]")
     print(f"[mjoco] Action scale range: [{action_scale.min():.4f}, {action_scale.max():.4f}]")
@@ -482,43 +514,51 @@ def main():
     print(f"[motion] Loaded: {n_motion_steps} frames, fps={motion_fps}")
     print(f"[motion] joint_pos shape: {ref_joint_pos.shape}, body_pos_w shape: {ref_body_pos_w.shape}")
 
-    # Map body names to .npz body indices
-    # The .npz stores ALL 30 bodies in PhysX BFS order (NOT the cfg body_names order).
-    # This BFS ordering was verified by cross-checking left/right y-coordinates.
-    NPZ_BODY_ORDER = [
-        "pelvis",                    # 0
-        "left_hip_pitch_link",       # 1
-        "right_hip_pitch_link",      # 2
-        "waist_yaw_link",            # 3
-        "left_hip_roll_link",        # 4
-        "right_hip_roll_link",       # 5
-        "waist_roll_link",           # 6
-        "left_hip_yaw_link",         # 7
-        "right_hip_yaw_link",        # 8
-        "torso_link",                # 9  ← ANCHOR
-        "left_knee_link",            # 10
-        "right_knee_link",           # 11
-        "left_shoulder_pitch_link",  # 12
-        "right_shoulder_pitch_link", # 13
-        "left_ankle_pitch_link",     # 14
-        "right_ankle_pitch_link",    # 15
-        "left_shoulder_roll_link",   # 16
-        "right_shoulder_roll_link",  # 17
-        "left_ankle_roll_link",      # 18
-        "right_ankle_roll_link",     # 19
-        "left_shoulder_yaw_link",    # 20
-        "right_shoulder_yaw_link",   # 21
-        "left_elbow_link",           # 22
-        "right_elbow_link",          # 23
-        "left_wrist_roll_link",      # 24
-        "right_wrist_roll_link",     # 25
-        "left_wrist_pitch_link",     # 26
-        "right_wrist_pitch_link",    # 27
-        "left_wrist_yaw_link",       # 28
-        "right_wrist_yaw_link",      # 29
-    ]
-    anchor_body_name = "torso_link"
-    anchor_npz_idx = NPZ_BODY_ORDER.index(anchor_body_name)  # = 9
+    # Map body names to .npz body indices.
+    # Newer npz files (csv_to_npz.py / tools_csv_to_npz_x1_local.py) store
+    # `body_names` directly — use it. Older G1 npz files don't, so fall back
+    # to the verified BFS order.
+    if "body_names" in motion_data:
+        NPZ_BODY_ORDER = [str(b) for b in motion_data["body_names"]]
+        print(f"[motion] body order from npz: {len(NPZ_BODY_ORDER)} bodies")
+    elif args.robot == "x1":
+        NPZ_BODY_ORDER = X1_NPZ_BODY_ORDER
+        print("[motion] body order: X1 BFS fallback")
+    else:
+        NPZ_BODY_ORDER = [
+            "pelvis",                    # 0
+            "left_hip_pitch_link",       # 1
+            "right_hip_pitch_link",      # 2
+            "waist_yaw_link",            # 3
+            "left_hip_roll_link",        # 4
+            "right_hip_roll_link",       # 5
+            "waist_roll_link",           # 6
+            "left_hip_yaw_link",         # 7
+            "right_hip_yaw_link",        # 8
+            "torso_link",                # 9  ← ANCHOR
+            "left_knee_link",            # 10
+            "right_knee_link",           # 11
+            "left_shoulder_pitch_link",  # 12
+            "right_shoulder_pitch_link", # 13
+            "left_ankle_pitch_link",     # 14
+            "right_ankle_pitch_link",    # 15
+            "left_shoulder_roll_link",   # 16
+            "right_shoulder_roll_link",  # 17
+            "left_ankle_roll_link",      # 18
+            "right_ankle_roll_link",     # 19
+            "left_shoulder_yaw_link",    # 20
+            "right_shoulder_yaw_link",   # 21
+            "left_elbow_link",           # 22
+            "right_elbow_link",          # 23
+            "left_wrist_roll_link",      # 24
+            "right_wrist_roll_link",     # 25
+            "left_wrist_pitch_link",     # 26
+            "right_wrist_pitch_link",    # 27
+            "left_wrist_yaw_link",       # 28
+            "right_wrist_yaw_link",      # 29
+        ]
+    anchor_body_name = "lumbar_pitch_link" if args.robot == "x1" else "torso_link"
+    anchor_npz_idx = NPZ_BODY_ORDER.index(anchor_body_name)
 
     # Get MuJoCo body ID for the anchor
     anchor_body_mj_id = model.body(anchor_body_name).id
@@ -537,23 +577,36 @@ def main():
         print("[policy] Normalization DISABLED by user flag")
 
     # ── Initialize robot state ──
-    # Reset to default position
+    # Start AT the reference motion's frame-0 state (root pos/quat + joints),
+    # mirroring how MotionCommand._resample_command resets episodes during
+    # training. Starting at the world origin would put the anchor-position
+    # obs meters out of distribution for motions that travel.
     mujoco.mj_resetData(model, data)
-    
-    init_height = X1_INIT_HEIGHT if args.robot == "x1" else INIT_HEIGHT
-    # Set free joint position
-    data.qpos[0:3] = [0.0, 0.0, init_height]
-    data.qpos[3:7] = [1.0, 0.0, 0.0, 0.0]  # identity quaternion (w,x,y,z)
-    data.qvel[0:6] = 0.0
 
-    # Set joint positions to default
+    base_npz_idx = 0  # npz body 0 is the floating base
+    data.qpos[0:3] = ref_body_pos_w[0, base_npz_idx]
+    q0 = ref_body_quat_w[0, base_npz_idx]  # wxyz in npz
+    data.qpos[3:7] = q0
+    data.qvel[0:6] = 0.0
     for i, adr in enumerate(joint_qpos_adr):
-        data.qpos[adr] = default_pos[i]
+        data.qpos[adr] = ref_joint_pos[0, i]
     for i, adr in enumerate(joint_dof_adr):
-        data.qvel[adr] = 0.0
+        data.qvel[adr] = ref_joint_vel[0, i]
 
     mujoco.mj_forward(model, data)
-    print(f"[init] Robot at height {init_height}m with default joint positions")
+    print(f"[init] Robot initialized at reference frame 0: pos={np.round(data.qpos[0:3], 3)}")
+
+    def reset_to_ref_frame(frame_idx: int) -> None:
+        """Teleport robot to a reference frame (mirrors training episode reset)."""
+        mujoco.mj_resetData(model, data)
+        data.qpos[0:3] = ref_body_pos_w[frame_idx, 0]
+        data.qpos[3:7] = ref_body_quat_w[frame_idx, 0]
+        for _i, _adr in enumerate(joint_qpos_adr):
+            data.qpos[_adr] = ref_joint_pos[frame_idx, _i]
+        for _i, _adr in enumerate(joint_dof_adr):
+            data.qvel[_adr] = ref_joint_vel[frame_idx, _i]
+        mujoco.mj_forward(model, data)
+
 
     # ── Main playback loop ──
     motion_step = 0
@@ -571,6 +624,44 @@ def main():
     # Total: 2*n_dof + 3 + 6 + 3 + 3 + n_dof + n_dof + n_dof = 5*n_dof + 15
     
     expected_obs_dim = 5 * n_dof + 15
+
+    # ── Joint order permutation (X1) ──────────────────────────────────────
+    # IsaacLab PhysX orders the URDF joints BFS with an alphabetical queue
+    # (verified empirically from the trained checkpoint's obs normalizer:
+    # mean[0:29] matches the per-joint reference averages in this order).
+    # MuJoCo/MJCF uses the serial tree order. The policy speaks PhysX; the
+    # simulator speaks MuJoCo — reorder at the boundary.
+    X1_PHYSX_JOINT_ORDER = [
+        "left_hip_pitch_joint", "lumbar_yaw_joint", "right_hip_pitch_joint",
+        "left_hip_roll_joint", "lumbar_roll_joint", "right_hip_roll_joint",
+        "left_hip_yaw_joint", "lumbar_pitch_joint", "right_hip_yaw_joint",
+        "left_knee_pitch_joint", "left_shoulder_pitch_joint", "right_shoulder_pitch_joint", "right_knee_pitch_joint",
+        "left_ankle_pitch_joint", "left_shoulder_roll_joint", "right_shoulder_roll_joint", "right_ankle_pitch_joint",
+        "left_ankle_roll_joint", "left_shoulder_yaw_joint", "right_shoulder_yaw_joint", "right_ankle_roll_joint",
+        "left_elbow_pitch_joint", "right_elbow_pitch_joint",
+        "left_elbow_yaw_joint", "right_elbow_yaw_joint",
+        "left_wrist_pitch_joint", "right_wrist_pitch_joint",
+        "left_wrist_roll_joint", "right_wrist_roll_joint",
+    ]
+    if args.robot == "x1":
+        _px_index = {n: i for i, n in enumerate(X1_PHYSX_JOINT_ORDER)}
+        _mj_to_px = np.array([_px_index[n] for n in joint_names_dof], dtype=int)
+        _mj_to_px_inv = np.argsort(_mj_to_px)  # px slot -> mj index
+
+        def to_px(v):
+            # mj-order vector -> px-order vector: v_px = v_mj[P^-1]
+            return v[_mj_to_px_inv]
+
+        def from_px(v):
+            # px-order vector -> mj-order vector: v_mj = v_px[P]
+            return v[_mj_to_px]
+        print("[perm] X1 PhysX<->MuJoCo joint order active")
+    else:
+        def to_px(v):
+            return v
+
+        def from_px(v):
+            return v
     print(f"[obs] Expected obs dim: {expected_obs_dim} (policy expects {obs_dim})")
     if expected_obs_dim != obs_dim:
         print(f"[WARNING] Obs dimension mismatch! Expected {expected_obs_dim}, policy expects {obs_dim}")
@@ -595,25 +686,28 @@ def main():
             robot_anchor_quat_w = data.xquat[anchor_body_mj_id].copy()
             base_lin_vel = data.qvel[0:3].copy()
             base_ang_vel = data.qvel[3:6].copy()
+            # MuJoCo free-joint linear velocity is WORLD-frame; IsaacLab's
+            # base_lin_vel obs is BODY-frame (empirically verified).
+            base_lin_vel = quat_rotate_inv(data.qpos[3:7], base_lin_vel)
             joint_pos = np.array([data.qpos[adr] for adr in joint_qpos_adr])
             joint_vel = np.array([data.qvel[adr] for adr in joint_dof_adr])
             ref_jpos = ref_joint_pos[t]
             ref_jvel = ref_joint_vel[t]
             ref_anchor_pos_w = ref_body_pos_w[t, anchor_npz_idx]
             ref_anchor_quat_w = ref_body_quat_w[t, anchor_npz_idx]
-            obs_command = np.concatenate([ref_jpos, ref_jvel])
+            obs_command = np.concatenate([to_px(ref_jpos), to_px(ref_jvel)])
             anchor_pos_b, anchor_quat_b = subtract_frame_transform(
                 robot_anchor_pos_w, robot_anchor_quat_w, ref_anchor_pos_w, ref_anchor_quat_w)
             rotmat_b = quat_to_rotmat(anchor_quat_b)
             obs_np = np.concatenate([
                 obs_command, anchor_pos_b, rotmat_b[:, :2].flatten(),
                 base_lin_vel, base_ang_vel,
-                joint_pos - default_pos, joint_vel, last_action,
+                to_px(joint_pos - default_pos), to_px(joint_vel), last_action,
             ]).astype(np.float32)
             with torch.no_grad():
                 action = actor(normalize_obs(torch.from_numpy(obs_np).unsqueeze(0), normalizer)).squeeze(0).numpy().astype(np.float32)
             last_action = action.copy()
-            target_pos = default_pos + action * action_scale
+            target_pos = default_pos + from_px(action) * action_scale
             for _sub in range(DECIMATION):
                 joint_pos_now = np.array([data.qpos[adr] for adr in joint_qpos_adr])
                 joint_vel_now = np.array([data.qvel[adr] for adr in joint_dof_adr])
@@ -621,7 +715,9 @@ def main():
                 for i in range(len(joint_dof_adr)):
                     effort_limit, _, _ = _match_joint_params_auto(joint_names_dof[i])
                     tau[i] = np.clip(tau[i], -effort_limit, effort_limit)
-                data.ctrl[:] = tau
+                ctrl = np.zeros(model.nu)
+                ctrl[_act_for_joint] = tau
+                data.ctrl[:] = ctrl
                 mujoco.mj_step(model, data)
             # metrics
             metrics["body_pos_err"].append(float(np.mean(np.linalg.norm(
@@ -633,9 +729,10 @@ def main():
             metrics["steps"] += 1
             motion_step += 1
             if motion_step >= n_motion_steps:
-                print("[playback] motion looped")
+                print("[playback] motion looped (reset to frame 0, as in training episode reset)")
                 motion_step = 0
                 last_action = np.zeros(action_dim, dtype=np.float32)
+                reset_to_ref_frame(0)
 
     if args.headless:
         import json as _json
@@ -673,6 +770,8 @@ def main():
             # MuJoCo qvel for free joint: [0:3] = lin vel (body frame), [3:6] = ang vel (body frame)
             base_lin_vel = data.qvel[0:3].copy()
             base_ang_vel = data.qvel[3:6].copy()
+            # correction: MuJoCo linear free-joint velocity is WORLD-frame
+            base_lin_vel = quat_rotate_inv(data.qpos[3:7], base_lin_vel)
             # Joint positions and velocities
             joint_pos = np.array([data.qpos[adr] for adr in joint_qpos_adr])
             joint_vel = np.array([data.qvel[adr] for adr in joint_dof_adr])
@@ -685,7 +784,7 @@ def main():
 
             # ── Build observation vector ──
             # 1. command: ref_joint_pos + ref_joint_vel
-            obs_command = np.concatenate([ref_jpos, ref_jvel])
+            obs_command = np.concatenate([to_px(ref_jpos), to_px(ref_jvel)])
 
             # 2. motion_anchor_pos_b: ref anchor in robot anchor body frame
             anchor_pos_b, anchor_quat_b = subtract_frame_transform(
@@ -703,10 +802,10 @@ def main():
             obs_base_ang_vel = base_ang_vel  # (3,)
 
             # 6. joint_pos_rel: deviation from default
-            obs_joint_pos_rel = joint_pos - default_pos  # (n_dof,)
+            obs_joint_pos_rel = to_px(joint_pos - default_pos)  # (n_dof,)
 
             # 7. joint_vel
-            obs_joint_vel = joint_vel  # (n_dof,)
+            obs_joint_vel = to_px(joint_vel)  # (n_dof,)
 
             # 8. last_action
             obs_last_action = last_action  # (n_dof,)
@@ -736,7 +835,7 @@ def main():
             last_action = action.copy()
 
             # ── Compute target joint positions ──
-            target_pos = default_pos + action * action_scale
+            target_pos = default_pos + from_px(action) * action_scale
 
             # ── PD control + simulation step (DECIMATION sub-steps) ──
             for _ in range(DECIMATION):
@@ -748,7 +847,9 @@ def main():
                     tau[i] = np.clip(tau[i], -effort_limit, effort_limit)
                 
                 # Set control torques
-                data.ctrl[:] = tau
+                ctrl = np.zeros(model.nu)
+                ctrl[_act_for_joint] = tau
+                data.ctrl[:] = ctrl
                 
                 # Step simulation
                 mujoco.mj_step(model, data)
@@ -763,9 +864,10 @@ def main():
 
             # Loop the motion
             if motion_step >= n_motion_steps:
-                print(f"[playback] Motion ended at step {step_count}, looping...")
+                print(f"[playback] Motion ended at step {step_count}, looping (reset to frame 0)...")
                 motion_step = 0
                 last_action = np.zeros(action_dim, dtype=np.float32)
+                reset_to_ref_frame(0)
 
             # ── Sync viewer ──
             viewer.sync()

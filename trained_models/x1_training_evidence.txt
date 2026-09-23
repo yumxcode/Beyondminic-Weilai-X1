@@ -1,0 +1,12 @@
+X1 dance training final (TASK_20260923_147, iter 4999):
+Mean reward: 31.75 (G1 baseline 26.04)
+Mean episode length: 489.91 (G1 baseline 472.30)
+error_body_pos: 0.058 (G1 0.062)
+Total timesteps: 491520000
+
+Sim2sim (MuJoCo, 5 loops / 3235 steps / 64.7s):
+mean_body_pos_err_m: 0.121
+mean_joint_pos_err_rad: 0.272
+mean_anchor_pos_err_m: 0.103
+min_base_z_m: 0.511 (dance crouch)
+fall_detected: false -> STABLE

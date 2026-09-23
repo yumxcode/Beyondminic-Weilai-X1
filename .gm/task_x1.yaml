@@ -1,0 +1,62 @@
+# Gradmotion Training Task Configuration
+# BeyondMimic X1 (Xyber X1) 29DOF Dance Motion Tracking
+
+project:
+  projectId: "PRO_20260922_013"
+  projectName: "Beyondminic-X1-Dance"
+  description: "BeyondMimic Xyber X1 29DOF dance motion tracking training"
+
+task:
+  taskId: "TASK_20260923_147"
+  taskName: "beyondmimic-x1-dance-v10"
+  status: 5  # finished
+  description: "BeyondMimic X1 29DOF dance tracking - name-based npz remapping"
+
+resources:
+  goodsId: "ESKU000001"
+  goodsName: "1*4090D*24G"
+  imageId: "BJX00000028"       # IsaacSim:4.5 | IsaacLab:2.1.0
+  imageVersion: "V000127"
+  gpuNum: 1
+
+code:
+  repo: "https://github.com/yumxcode/Beyondminic-Weilai-X1.git"
+  branch: "main"
+  mainCodeUri: "Beyondminic-Weilai-X1/whole_body_tracking/scripts/entry_x1_train.py"
+  startScript: >-
+    gm-run Beyondminic-Weilai-X1/whole_body_tracking/scripts/entry_x1_train.py
+    --task=Tracking-Flat-X1-v0
+    --motion_file motions/dance_x1_train.npz
+    --headless --num_envs 4096 --max_iterations 5000
+
+training:
+  iterations: 5000
+  totalTimesteps: 491520000
+  numEnvs: 4096
+  motionFile: "motions/dance_x1_train.npz (LAFAN1 dance1_subject3 clip [2602,2991] @30fps -> 647f @50fps, retarget quality gates all PASS)"
+
+results:
+  finalReward: 31.75          # G1 baseline: 26.04
+  finalEpisodeLength: 489.91  # G1 baseline: 472.30
+  error_body_pos: 0.058       # G1 baseline: 0.062
+  error_joint_pos: 2.145
+  bestCheckpoint: 4999
+  modelFile: "trained_models/dance_x1_model_4999.pt"
+
+sim2sim:
+  command: >-
+    .venv/bin/python whole_body_tracking/scripts/play_mujoco.py --robot x1 --headless
+    --checkpoint trained_models/dance_x1_model_4999.pt
+    --motion whole_body_tracking/motions/dance_x1_train.npz --max_steps 3235
+  loops: 5 (3235 steps, 64.7 s)
+  mean_body_pos_err_m: 0.121
+  mean_joint_pos_err_rad: 0.272
+  mean_anchor_pos_err_m: 0.103
+  min_base_z_m: 0.511
+  fall_detected: false
+  verdict: STABLE
+
+pipeline:
+  retarget: "GMR xyber_x1 (bvh_lafan1) -> dance1_subject3_x1.csv -> clean window -> dance_x1_train.csv"
+  conversion: "tools_csv_to_npz_x1_local.py (local MuJoCo FK, image numpy conflict workaround)"
+  qualityGates: "tools_check_motion_x1.py: ground/self penetration, joint limits/velocities, root height, continuity - ALL PASS"
