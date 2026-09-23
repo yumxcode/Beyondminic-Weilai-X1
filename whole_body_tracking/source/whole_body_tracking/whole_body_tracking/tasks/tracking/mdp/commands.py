@@ -28,16 +28,51 @@ if TYPE_CHECKING:
 
 
 class MotionLoader:
-    def __init__(self, motion_file: str, body_indexes: Sequence[int], device: str = "cpu"):
+    def __init__(
+        self,
+        motion_file: str,
+        body_indexes: Sequence[int],
+        device: str = "cpu",
+        robot_body_names: Sequence[str] | None = None,
+        robot_joint_names: Sequence[str] | None = None,
+    ):
         assert os.path.isfile(motion_file), f"Invalid file path: {motion_file}"
         data = np.load(motion_file)
         self.fps = data["fps"]
-        self.joint_pos = torch.tensor(data["joint_pos"], dtype=torch.float32, device=device)
-        self.joint_vel = torch.tensor(data["joint_vel"], dtype=torch.float32, device=device)
-        self._body_pos_w = torch.tensor(data["body_pos_w"], dtype=torch.float32, device=device)
-        self._body_quat_w = torch.tensor(data["body_quat_w"], dtype=torch.float32, device=device)
-        self._body_lin_vel_w = torch.tensor(data["body_lin_vel_w"], dtype=torch.float32, device=device)
-        self._body_ang_vel_w = torch.tensor(data["body_ang_vel_w"], dtype=torch.float32, device=device)
+
+        # Name-based remapping: when the npz stores body_names/joint_names
+        # (written by csv_to_npz.py or tools_csv_to_npz_x1_local.py), reorder
+        # the npz dimensions to exactly match the robot's PhysX ordering.
+        # This removes any assumption about the converter's ordering rules.
+        joint_perm = None
+        body_perm = None
+        if robot_joint_names is not None and "joint_names" in data:
+            npz_joint_names = [str(n) for n in data["joint_names"]]
+            missing = [n for n in robot_joint_names if n not in npz_joint_names]
+            assert not missing, f"npz missing robot joints: {missing[:5]}"
+            joint_perm = torch.tensor([npz_joint_names.index(n) for n in robot_joint_names], device=device)
+            print(f"[MotionLoader] joint order remapped by name ({len(robot_joint_names)} joints)")
+        if robot_body_names is not None and "body_names" in data:
+            npz_body_names = [str(n) for n in data["body_names"]]
+            missing = [n for n in robot_body_names if n not in npz_body_names]
+            assert not missing, f"npz missing robot bodies: {missing[:5]}"
+            body_perm = torch.tensor([npz_body_names.index(n) for n in robot_body_names], device=device)
+            print(f"[MotionLoader] body order remapped by name ({len(robot_body_names)} bodies)")
+
+        def _load(key: str, perm: torch.Tensor | None) -> torch.Tensor:
+            t = torch.tensor(data[key], dtype=torch.float32, device=device)
+            if perm is None:
+                return t
+            if t.dim() == 2:
+                return t[:, perm]
+            return t[:, perm]
+
+        self.joint_pos = _load("joint_pos", joint_perm)
+        self.joint_vel = _load("joint_vel", joint_perm)
+        self._body_pos_w = _load("body_pos_w", body_perm)
+        self._body_quat_w = _load("body_quat_w", body_perm)
+        self._body_lin_vel_w = _load("body_lin_vel_w", body_perm)
+        self._body_ang_vel_w = _load("body_ang_vel_w", body_perm)
         self._body_indexes = body_indexes
         self.time_step_total = self.joint_pos.shape[0]
 
@@ -71,7 +106,13 @@ class MotionCommand(CommandTerm):
             self.robot.find_bodies(self.cfg.body_names, preserve_order=True)[0], dtype=torch.long, device=self.device
         )
 
-        self.motion = MotionLoader(self.cfg.motion_file, self.body_indexes, device=self.device)
+        self.motion = MotionLoader(
+            self.cfg.motion_file,
+            self.body_indexes,
+            device=self.device,
+            robot_body_names=self.robot.body_names,
+            robot_joint_names=self.robot.joint_names,
+        )
         self.time_steps = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
         self.body_pos_relative_w = torch.zeros(self.num_envs, len(cfg.body_names), 3, device=self.device)
         self.body_quat_relative_w = torch.zeros(self.num_envs, len(cfg.body_names), 4, device=self.device)
