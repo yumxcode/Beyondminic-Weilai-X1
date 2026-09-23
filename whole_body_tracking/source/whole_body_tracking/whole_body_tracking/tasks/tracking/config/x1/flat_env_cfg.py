@@ -32,7 +32,7 @@ class X1FlatEnvCfg(TrackingEnvCfg):
 
         # Robot-specific overrides of G1 defaults in the base TrackingEnvCfg.
         # X1 COM randomization acts on the torso link (lumbar_pitch_link).
-        self.events.base_com.params["asset_cfg"] = SceneEntityCfg("lumbar_pitch_link")
+        self.events.base_com.params["asset_cfg"] = SceneEntityCfg("robot", body_names="lumbar_pitch_link")
 
         # Unwanted contacts: everything except feet (ankle_roll) and hands (wrist_roll).
         self.rewards.undesired_contacts.params["sensor_cfg"] = SceneEntityCfg(
