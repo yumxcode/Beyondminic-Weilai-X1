@@ -69,8 +69,10 @@ def main() -> None:
             raise FileNotFoundError(known.motion_file)
 
     train_script = os.path.join(SCRIPT_DIR, "rsl_rl", "train.py")
-    print(f"[entry] launching {train_script} {' '.join(train_args)}")
-    os.execv(sys.executable, [sys.executable, train_script] + train_args)
+    # --motion_file was consumed by this wrapper's parser; forward it to train.py
+    forwarded = train_args + ["--motion_file", known.motion_file]
+    print(f"[entry] launching {train_script} {' '.join(forwarded)}")
+    os.execv(sys.executable, [sys.executable, train_script] + forwarded)
 
 
 if __name__ == "__main__":
