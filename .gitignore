@@ -29,3 +29,7 @@ whole_body_tracking/motions/csv/x1_smoke60.csv
 tools_diag_*.py
 tools_debug_*.py
 tmp*.xml
+
+# Retargeting toolchain kept local-only (submodules break gradmotion clone)
+GMR/
+GVHMR/
