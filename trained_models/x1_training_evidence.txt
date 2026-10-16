@@ -1,12 +1,20 @@
-X1 dance training final (TASK_20260923_147, iter 4999):
-Mean reward: 31.75 (G1 baseline 26.04)
-Mean episode length: 489.91 (G1 baseline 472.30)
-error_body_pos: 0.058 (G1 0.062)
+X1 dance training v11 - identified params (TASK_20261016_065, iter 4999, commit 06856fd):
+Mean reward: 31.53 (v10 baseline 31.75)
+Mean episode length: 500.00 full-length (v10 baseline 489.91)
+error_body_pos: 0.0623 (v10 baseline 0.058)
 Total timesteps: 491520000
 
-Sim2sim (MuJoCo, 5 loops / 3235 steps / 64.7s):
-mean_body_pos_err_m: 0.121
-mean_joint_pos_err_rad: 0.272
-mean_anchor_pos_err_m: 0.103
-min_base_z_m: 0.511 (dance crouch)
-fall_detected: false -> STABLE
+Changes vs v10: actuators switched to sim2real-identified armature/kp/kd
+(x1_armature_pd.md Plan B, kd<=8 MIT limit) in robots/x1.py AND
+play_mujoco.py; effort/velocity limits unchanged; env otherwise identical.
+
+Sim2sim (MuJoCo, 5 loops / 3235 steps / 64.7s, same protocol as v10):
+mean_body_pos_err_m: 0.127      (v10 0.121)
+mean_joint_pos_err_rad: 0.2806  (v10 0.272)
+mean_anchor_pos_err_m: 0.1022   (v10 0.103)
+min_base_z_m: 0.510             (v10 0.511, dance crouch)
+fall_detected: false -> STABLE  (v10 stable)
+
+Verdict: sim2sim metrics match the v10 baseline while the policy now
+matches the real robot's identified inertia/PD gains -> ready for deployment.
+Model: trained_models/dance_x1_v11_model_4999.pt

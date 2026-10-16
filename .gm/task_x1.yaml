@@ -1,16 +1,18 @@
 # Gradmotion Training Task Configuration
 # BeyondMimic X1 (Xyber X1) 29DOF Dance Motion Tracking
 
+# ---- CURRENT: v11 identified-params retrain (2026-10-16) ----
 project:
-  projectId: "PRO_20260922_013"
-  projectName: "Beyondminic-X1-Dance"
-  description: "BeyondMimic Xyber X1 29DOF dance motion tracking training"
+  projectId: "PRO_20261016_008"
+  projectName: "Beyondminic-X1-Dance-Ident"
+  description: "BeyondMimic X1 29DOF dance retrain with sim2real-identified armature/kp/kd"
 
 task:
-  taskId: "TASK_20260923_147"
-  taskName: "beyondmimic-x1-dance-v10"
+  taskId: "TASK_20261016_065"
+  taskName: "beyondmimic-x1-dance-v11-ident"
   status: 5  # finished
-  description: "BeyondMimic X1 29DOF dance tracking - name-based npz remapping"
+  description: "Retrain with identified armature/PD gains (Plan B); sim2sim metrics match v10 baseline"
+  account: "xogim56224 (userId 501); note: accounts mofey10266/jebexi1407 were removed from the pool (insufficient balance)"
 
 resources:
   goodsId: "ESKU000001"
@@ -22,6 +24,7 @@ resources:
 code:
   repo: "https://github.com/yumxcode/Beyondminic-Weilai-X1.git"
   branch: "main"
+  commit: "06856fd"
   mainCodeUri: "Beyondminic-Weilai-X1/whole_body_tracking/scripts/entry_x1_train.py"
   startScript: >-
     gm-run Beyondminic-Weilai-X1/whole_body_tracking/scripts/entry_x1_train.py
@@ -33,30 +36,42 @@ training:
   iterations: 5000
   totalTimesteps: 491520000
   numEnvs: 4096
-  motionFile: "motions/dance_x1_train.npz (LAFAN1 dance1_subject3 clip [2602,2991] @30fps -> 647f @50fps, retarget quality gates all PASS)"
+  motionFile: "motions/dance_x1_train.npz (unchanged from v10)"
+  paramChange: "robots/x1.py + scripts/play_mujoco.py actuators -> x1_armature_pd.md Plan B (armature/kp/kd, kd<=8); effort/velocity unchanged; env otherwise identical"
 
 results:
-  finalReward: 31.75          # G1 baseline: 26.04
-  finalEpisodeLength: 489.91  # G1 baseline: 472.30
-  error_body_pos: 0.058       # G1 baseline: 0.062
-  error_joint_pos: 2.145
+  finalReward: 31.53          # v10: 31.75
+  finalEpisodeLength: 500.00   # v10: 489.91 (now full-length)
+  error_body_pos: 0.0623       # v10: 0.058
   bestCheckpoint: 4999
-  modelFile: "trained_models/dance_x1_model_4999.pt"
+  modelFile: "trained_models/dance_x1_v11_model_4999.pt"
+  runtime_s: 5587
 
 sim2sim:
   command: >-
     .venv/bin/python whole_body_tracking/scripts/play_mujoco.py --robot x1 --headless
-    --checkpoint trained_models/dance_x1_model_4999.pt
+    --checkpoint trained_models/dance_x1_v11_model_4999.pt
     --motion whole_body_tracking/motions/dance_x1_train.npz --max_steps 3235
   loops: 5 (3235 steps, 64.7 s)
-  mean_body_pos_err_m: 0.121
-  mean_joint_pos_err_rad: 0.272
-  mean_anchor_pos_err_m: 0.103
-  min_base_z_m: 0.511
+  mean_body_pos_err_m: 0.127      # v10: 0.121
+  mean_joint_pos_err_rad: 0.2806  # v10: 0.272
+  mean_anchor_pos_err_m: 0.1022   # v10: 0.103
+  min_base_z_m: 0.510             # v10: 0.511
   fall_detected: false
-  verdict: STABLE
+  verdict: STABLE, metrics match v10 baseline
 
-pipeline:
-  retarget: "GMR xyber_x1 (bvh_lafan1) -> dance1_subject3_x1.csv -> clean window -> dance_x1_train.csv"
-  conversion: "tools_csv_to_npz_x1_local.py (local MuJoCo FK, image numpy conflict workaround)"
-  qualityGates: "tools_check_motion_x1.py: ground/self penetration, joint limits/velocities, root height, continuity - ALL PASS"
+deployment:
+  note: >-
+    Deploy kp/kd per x1_armature_pd.md section 4 (rl_x1.yaml rl_walk_amp order);
+    ankles run host-side software PD with the same values; pd_stand/keep
+    controllers unchanged.
+
+# ---- HISTORY: v10 baseline (2026-09-23, PRO_20260922_013, account rahobaf479) ----
+v10:
+  taskId: "TASK_20260923_147"
+  taskName: "beyondmimic-x1-dance-v10"
+  finalReward: 31.75
+  finalEpisodeLength: 489.91
+  error_body_pos: 0.058
+  modelFile: "trained_models/dance_x1_model_4999.pt"
+  sim2sim: {body: 0.121, joint: 0.272, anchor: 0.103, min_z: 0.511, fall: false}
