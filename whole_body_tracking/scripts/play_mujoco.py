@@ -100,35 +100,28 @@ INIT_HEIGHT = 0.76  # G1_CYLINDER_CFG.init_state.pos[2]
 #  X1 robot parameters (mirrors robots/x1.py)
 # ─────────────────────────────────────────────────────────────
 
-_NATURAL_FREQ_X1 = 10.0 * 2.0 * np.pi
-_DAMPING_RATIO_X1 = 2.0
-_W2_X1 = _NATURAL_FREQ_X1 ** 2
-
-_ARM_X1 = {
-    "hip_pitch": 0.00760, "hip_roll": 0.01013, "hip_yaw": 0.00887,
-    "knee": 0.02533, "ankle": 0.00887,
-    "lumbar_yaw_roll": 0.01013, "lumbar_pitch": 0.01266,
-    "arm": 0.00253, "wrist": 0.00127,
-}
-
-# joint regex -> (effort_limit, armature)
+# X1 identified actuator parameters (2026-10-14, x1_armature_pd.md "方案 B"):
+# lab 12-DOF torque identification + X1 walking-log estimates after sim2real.
+# kd capped at 8.0 (MIT encoding limit on R86/R52 hosts); kp lowered on
+# kd-capped joints to keep ζ≈0.4-0.7. Keep in sync with robots/x1.py.
+# joint regex -> (effort_limit, armature, kp, kd)
 _X1_JOINT_CLASS = [
-    (r".*_hip_pitch_joint", 180.0, _ARM_X1["hip_pitch"]),
-    (r".*_hip_roll_joint", 150.0, _ARM_X1["hip_roll"]),
-    (r".*_hip_yaw_joint", 150.0, _ARM_X1["hip_yaw"]),
-    (r".*_knee_pitch_joint", 180.0, _ARM_X1["knee"]),
-    (r".*_ankle_pitch_joint", 80.0, _ARM_X1["ankle"]),
-    (r".*_ankle_roll_joint", 80.0, _ARM_X1["ankle"]),
-    (r"lumbar_yaw_joint", 150.0, _ARM_X1["lumbar_yaw_roll"]),
-    (r"lumbar_roll_joint", 150.0, _ARM_X1["lumbar_yaw_roll"]),
-    (r"lumbar_pitch_joint", 180.0, _ARM_X1["lumbar_pitch"]),
-    (r".*_shoulder_pitch_joint", 20.0, _ARM_X1["arm"]),
-    (r".*_shoulder_roll_joint", 20.0, _ARM_X1["arm"]),
-    (r".*_shoulder_yaw_joint", 20.0, _ARM_X1["arm"]),
-    (r".*_elbow_pitch_joint", 20.0, _ARM_X1["arm"]),
-    (r".*_elbow_yaw_joint", 20.0, _ARM_X1["arm"]),
-    (r".*_wrist_pitch_joint", 10.0, _ARM_X1["wrist"]),
-    (r".*_wrist_roll_joint", 10.0, _ARM_X1["wrist"]),
+    (r".*_hip_pitch_joint", 180.0, 0.208, 65.0, 8.0),
+    (r".*_hip_roll_joint", 150.0, 0.250, 60.0, 8.0),
+    (r".*_hip_yaw_joint", 150.0, 0.0148, 100.0, 3.3),
+    (r".*_knee_pitch_joint", 180.0, 0.273, 85.0, 8.0),
+    (r".*_ankle_pitch_joint", 80.0, 0.150, 50.0, 4.0),
+    (r".*_ankle_roll_joint", 80.0, 0.035, 50.0, 2.5),
+    (r"lumbar_yaw_joint", 150.0, 0.022, 90.0, 8.0),
+    (r"lumbar_roll_joint", 150.0, 0.021, 70.0, 8.0),
+    (r"lumbar_pitch_joint", 180.0, 0.012, 100.0, 8.0),
+    (r".*_shoulder_pitch_joint", 20.0, 0.020, 40.0, 4.0),
+    (r".*_shoulder_roll_joint", 20.0, 0.013, 40.0, 4.0),
+    (r".*_shoulder_yaw_joint", 20.0, 0.010, 40.0, 2.0),
+    (r".*_elbow_pitch_joint", 20.0, 0.010, 30.0, 1.9),
+    (r".*_elbow_yaw_joint", 20.0, 0.010, 20.0, 1.0),
+    (r".*_wrist_pitch_joint", 10.0, 0.010, 15.0, 1.0),
+    (r".*_wrist_roll_joint", 10.0, 0.010, 15.0, 1.0),
 ]
 
 # X1 default joint positions (home keyframe)
@@ -210,10 +203,8 @@ _ROBOT = "g1"  # set from CLI in main()
 
 def _match_joint_params_auto(joint_name: str) -> tuple[float, float, float]:
     if _ROBOT == "x1":
-        for pattern, effort, armature in _X1_JOINT_CLASS:
+        for pattern, effort, _armature, kp, kd in _X1_JOINT_CLASS:
             if _re.fullmatch(pattern, joint_name):
-                kp = armature * _W2_X1
-                kd = 2.0 * _DAMPING_RATIO_X1 * armature * _NATURAL_FREQ_X1
                 return (effort, kp, kd)
         raise ValueError(f"No matching X1 params for joint: {joint_name}")
     return _match_joint_params(joint_name)
@@ -476,7 +467,7 @@ def main():
     # Ultra-light wrist joints without armature destabilize the PD loop.
     if args.robot == "x1":
         for _i, _nm in enumerate(joint_names_dof):
-            for _pat, _effort, _arm in _X1_JOINT_CLASS:
+            for _pat, _effort, _arm, _kp, _kd in _X1_JOINT_CLASS:
                 import re as _re2
                 if _re2.fullmatch(_pat, _nm):
                     _dadr = model.jnt_dofadr[model.joint(_nm).id]
