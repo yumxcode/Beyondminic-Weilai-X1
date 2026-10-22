@@ -365,6 +365,13 @@ def quat_rotate_inv(q: np.ndarray, v: np.ndarray) -> np.ndarray:
     return quat_rotate(quat_inv(q), v)
 
 
+def yaw_quat(q: np.ndarray) -> np.ndarray:
+    """Yaw-only quaternion (w,x,y,z) of rotation q."""
+    w, x, y, z = q
+    psi = np.arctan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
+    return np.array([np.cos(psi / 2.0), 0.0, 0.0, np.sin(psi / 2.0)])
+
+
 def quat_to_rotmat(q: np.ndarray) -> np.ndarray:
     """Quaternion (w,x,y,z) to 3x3 rotation matrix."""
     w, x, y, z = q
@@ -419,6 +426,8 @@ def main():
                         help="Video width in px for --record")
     parser.add_argument("--height", type=int, default=720,
                         help="Video height in px for --record")
+    parser.add_argument("--dump_metrics", type=str, default=None,
+                        help="Dump per-step metrics to this .npz (headless mode)")
     args = parser.parse_args()
     global _ROBOT
     _ROBOT = args.robot
@@ -685,7 +694,8 @@ def main():
 
     metrics = {
         "body_pos_err": [], "joint_pos_err": [], "anchor_pos_err": [],
-        "base_z": [], "steps": 0,
+        "body_pos_err_rel": [],
+        "base_z": [], "steps": 0, "robot_xy": [], "ref_xy": [], "ref_anchor_z": [], "robot_anchor_z": [],
     }
 
     # ── Optional offscreen video recording (headless mode only) ────────
@@ -761,12 +771,30 @@ def main():
                 data.ctrl[:] = ctrl
                 mujoco.mj_step(model, data)
             # metrics
+            _mj_body_ids = [model.body(b).id for b in NPZ_BODY_ORDER]
+            robot_body_pos_w = data.xpos[_mj_body_ids]
             metrics["body_pos_err"].append(float(np.mean(np.linalg.norm(
-                data.xpos[[model.body(b).id for b in NPZ_BODY_ORDER]] - ref_body_pos_w[t], axis=1))))
+                robot_body_pos_w - ref_body_pos_w[t], axis=1))))
+            # Anchor-relative body error, identical to training's
+            # Metrics/motion/error_body_pos (commands.py _update_command):
+            # reference bodies expressed in the "relative world" frame defined by
+            # the robot anchor XY + reference anchor Z, yaw-aligned anchor frames.
+            delta_ori_w = yaw_quat(quat_mul(robot_anchor_quat_w, quat_inv(ref_anchor_quat_w)))
+            delta_pos_w = robot_anchor_pos_w.copy()
+            delta_pos_w[2] = ref_anchor_pos_w[2]
+            ref_body_rel_w = delta_pos_w[None, :] + (
+                ref_body_pos_w[t] - ref_anchor_pos_w[None, :]
+            ) @ quat_to_rotmat(delta_ori_w).T
+            metrics["body_pos_err_rel"].append(float(np.mean(np.linalg.norm(
+                robot_body_pos_w - ref_body_rel_w, axis=1))))
             metrics["joint_pos_err"].append(float(np.mean(np.abs(
                 np.array([data.qpos[adr] for adr in joint_qpos_adr]) - ref_jpos))))
             metrics["anchor_pos_err"].append(float(np.linalg.norm(anchor_pos_b)))
             metrics["base_z"].append(float(data.qpos[2]))
+            metrics["robot_xy"].append(data.qpos[0:2].copy())
+            metrics["ref_xy"].append(ref_body_pos_w[t, 0, 0:2].copy())
+            metrics["robot_anchor_z"].append(float(robot_anchor_pos_w[2]))
+            metrics["ref_anchor_z"].append(float(ref_anchor_pos_w[2]))
             metrics["steps"] += 1
             if recorder is not None:
                 recorder["renderer"].update_scene(data, camera=recorder["cam"])
@@ -789,11 +817,25 @@ def main():
             recorder["writer"].close()
             print(f"[record] Video saved: {args.record} ({metrics['steps']} frames)")
         base_z = np.array(metrics["base_z"])
+        if args.dump_metrics:
+            np.savez(
+                args.dump_metrics,
+                body_pos_err=np.array(metrics["body_pos_err"]),
+                joint_pos_err=np.array(metrics["joint_pos_err"]),
+                anchor_pos_err=np.array(metrics["anchor_pos_err"]),
+                base_z=base_z,
+                robot_xy=np.array(metrics["robot_xy"]),
+                ref_xy=np.array(metrics["ref_xy"]),
+                robot_anchor_z=np.array(metrics["robot_anchor_z"]),
+                ref_anchor_z=np.array(metrics["ref_anchor_z"]),
+            )
+            print(f"[metrics] dumped to {args.dump_metrics}")
         summary = {
             "robot": args.robot,
             "steps": metrics["steps"],
             "wall_s": round(wall, 1),
             "mean_body_pos_err_m": round(float(np.mean(metrics["body_pos_err"])), 4),
+            "mean_body_pos_err_anchor_rel_m": round(float(np.mean(metrics["body_pos_err_rel"])), 4),
             "mean_joint_pos_err_rad": round(float(np.mean(metrics["joint_pos_err"])), 4),
             "mean_anchor_pos_err_m": round(float(np.mean(metrics["anchor_pos_err"])), 4),
             "min_base_z_m": round(float(base_z.min()), 3),

@@ -1,13 +1,89 @@
 # Gradmotion Training Task Configuration
 # BeyondMimic X1 (Xyber X1) 29DOF Dance Motion Tracking
 
-# ---- CURRENT: v11 identified-params retrain (2026-10-16) ----
+# ---- CURRENT: v12 Wo-State-Estimation 154-dim (2026-10-22) ----
+project:
+  projectId: "PRO_20261022_018"
+  projectName: "Beyondminic-X1-Dance-WSE"
+  description: "X1 29DOF dance, 154-dim Wo-State-Estimation obs (G1 deployment layout)"
+
+task:
+  taskId: "TASK_20261022_151"
+  taskName: "beyondmimic-x1-dance-v12-wse154"
+  status: 5  # finished
+  description: "154-dim obs: drop motion_anchor_pos_b + base_lin_vel (G1 deployment layout); else identical to v11"
+  account: "ridovi5230 (userId 4398)"
+
+resources:
+  goodsId: "ESKU000001"
+  goodsName: "1*4090D*24G"
+  imageId: "BJX00000028"       # IsaacSim:4.5 | IsaacLab:2.1.0
+  imageVersion: "V000127"
+  gpuNum: 1
+
+code:
+  repo: "https://github.com/yumxcode/Beyondminic-Weilai-X1.git"
+  branch: "main"
+  commit: "a8ec66c"
+  mainCodeUri: "Beyondminic-Weilai-X1/whole_body_tracking/scripts/entry_x1_train.py"
+  startScript: >-
+    gm-run Beyondminic-Weilai-X1/whole_body_tracking/scripts/entry_x1_train.py
+    --task=Tracking-Flat-X1-Wo-State-Estimation-v0
+    --motion_file motions/dance_x1_train.npz
+    --headless --num_envs 4096 --max_iterations 5000
+
+training:
+  iterations: 5000
+  totalTimesteps: 491520000
+  numEnvs: 4096
+  motionFile: "motions/dance_x1_train.npz (unchanged from v10/v11)"
+  paramChange: "observations.policy: motion_anchor_pos_b = None, base_lin_vel = None (X1FlatWoStateEstimationEnvCfg); actuators/rewards/terminations identical to v11"
+
+results:
+  finalReward: 29.50           # v11: 31.53 (less obs -> slightly lower, expected)
+  finalEpisodeLength: 499.76   # v11: 500.00
+  error_body_pos: 0.0650       # v11: 0.0623 (anchor-relative, training metric)
+  bestCheckpoint: 4999
+  modelFile: "trained_models/dance_x1_v12_model_4999.pt"
+  runtime_s: 5680              # 16:33:25 - 18:08:04
+  obsDim: 154                  # actor 154->512->256->128->29
+
+sim2sim:
+  command: >-
+    .venv/bin/python whole_body_tracking/scripts/play_mujoco.py --robot x1 --headless
+    --checkpoint trained_models/dance_x1_v12_model_4999.pt
+    --motion whole_body_tracking/motions/dance_x1_train.npz --max_steps 3235
+  loops: 5 (3235 steps, 64.7 s)
+  mean_joint_pos_err_rad: 0.277      # v11: 0.2806
+  mean_body_pos_err_anchor_rel_m: 0.0572  # v11: 0.0587 (training error_body_pos metric)
+  mean_body_pos_err_m: 0.8482        # v11: 0.127 — global drift, by design (see note)
+  mean_anchor_pos_err_m: 0.8394      # v11: 0.1022 — same cause
+  min_base_z_m: 0.506                # v11: 0.510
+  fall_detected: false
+  verdict: >-
+    STABLE — parity with v11 on stability + joint tracking + anchor-relative body
+    tracking (the policy-controllable metrics). Global body/anchor error is large
+    BY DESIGN: the 154-dim policy removes motion_anchor_pos_b (position-error
+    feedback), and the dance reference translates ~0.6-0.9 m per loop, so the
+    policy cannot follow the reference's horizontal travel. Identical to G1
+    Wo-State-Estimation deployment behavior (motion anchored at activation once,
+    no position feedback; real robot relies on state estimator). Each sim2sim
+    loop is deterministic and identical (no divergence).
+
+deployment:
+  note: >-
+    Same as v11 (kp/kd per x1_armature_pd.md section 4). Obs inputs now need only
+    IMU (base_ang_vel, anchor ori), joint encoders, and the reference motion —
+    no base linear velocity or anchor position estimation required, matching the
+    G1 motion_tracking_controller deployment layout.
+
+# ---- HISTORY: v11 identified-params retrain (2026-10-16) ----
 project:
   projectId: "PRO_20261016_008"
   projectName: "Beyondminic-X1-Dance-Ident"
   description: "BeyondMimic X1 29DOF dance retrain with sim2real-identified armature/kp/kd"
 
-task:
+v11task:
   taskId: "TASK_20261016_065"
   taskName: "beyondmimic-x1-dance-v11-ident"
   status: 5  # finished
