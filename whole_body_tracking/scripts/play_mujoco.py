@@ -413,6 +413,12 @@ def main():
                         help="No viewer: run metrics-only sim2sim evaluation")
     parser.add_argument("--max_steps", type=int, default=None,
                         help="Stop after N policy steps (headless mode)")
+    parser.add_argument("--record", type=str, default=None,
+                        help="Offscreen-render and record MP4 video (headless mode only)")
+    parser.add_argument("--width", type=int, default=1280,
+                        help="Video width in px for --record")
+    parser.add_argument("--height", type=int, default=720,
+                        help="Video height in px for --record")
     args = parser.parse_args()
     global _ROBOT
     _ROBOT = args.robot
@@ -605,16 +611,29 @@ def main():
     
     # Observation construction:
     # 1. command: ref_joint_pos (n_dof) + ref_joint_vel (n_dof) = 2*n_dof
-    # 2. motion_anchor_pos_b: 3
+    # 2. motion_anchor_pos_b: 3            (absent in Wo-State-Estimation policies)
     # 3. motion_anchor_ori_b: 6 (rotmat first 2 cols)
-    # 4. base_lin_vel: 3
+    # 4. base_lin_vel: 3                   (absent in Wo-State-Estimation policies)
     # 5. base_ang_vel: 3
     # 6. joint_pos_rel: n_dof
     # 7. joint_vel: n_dof
     # 8. last_action: n_dof
-    # Total: 2*n_dof + 3 + 6 + 3 + 3 + n_dof + n_dof + n_dof = 5*n_dof + 15
-    
-    expected_obs_dim = 5 * n_dof + 15
+    # Full:  5*n_dof + 15 (Tracking-Flat-X1-v0 / G1-v0)
+    # WSE:   5*n_dof + 9  (Tracking-Flat-*-Wo-State-Estimation-v0, the
+    #                      deployment layout of HybridRobotics G1: no
+    #                      motion_anchor_pos_b, no base_lin_vel -> 154 for 29 DoF)
+
+    full_obs_dim = 5 * n_dof + 15
+    wse_obs_dim = 5 * n_dof + 9
+    if obs_dim == wse_obs_dim:
+        obs_layout = "wo_state_estimation"
+    elif obs_dim == full_obs_dim:
+        obs_layout = "full"
+    else:
+        obs_layout = "full"
+        print(f"[WARNING] obs_dim={obs_dim} matches neither full ({full_obs_dim}) "
+              f"nor wo_state_estimation ({wse_obs_dim}); assuming full")
+    print(f"[obs] layout: {obs_layout} (obs_dim={obs_dim}, full={full_obs_dim}, wse={wse_obs_dim})")
 
     # ── Joint order permutation (X1) ──────────────────────────────────────
     # IsaacLab PhysX orders the URDF joints BFS with an alphabetical queue
@@ -653,9 +672,9 @@ def main():
 
         def from_px(v):
             return v
-    print(f"[obs] Expected obs dim: {expected_obs_dim} (policy expects {obs_dim})")
-    if expected_obs_dim != obs_dim:
-        print(f"[WARNING] Obs dimension mismatch! Expected {expected_obs_dim}, policy expects {obs_dim}")
+    print(f"[obs] Expected obs dim: {full_obs_dim if obs_layout == 'full' else wse_obs_dim} (policy expects {obs_dim})")
+    if (full_obs_dim if obs_layout == "full" else wse_obs_dim) != obs_dim:
+        print(f"[WARNING] Obs dimension mismatch! Policy expects {obs_dim}")
         print("[WARNING] The script may not work correctly. Check joint count and observation terms.")
 
     # ── Headless metrics mode ─────────────────────────────────────────
@@ -668,6 +687,30 @@ def main():
         "body_pos_err": [], "joint_pos_err": [], "anchor_pos_err": [],
         "base_z": [], "steps": 0,
     }
+
+    # ── Optional offscreen video recording (headless mode only) ────────
+    recorder = None
+    if args.record:
+        if not args.headless:
+            print("[record] --record requires --headless; ignoring --record")
+        else:
+            rec_cam = mujoco.MjvCamera()
+            rec_cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
+            rec_cam.trackbodyid = int(model.jnt_bodyid[0])  # free-joint body
+            rec_cam.distance = 4.0
+            rec_cam.elevation = -10.0
+            rec_cam.azimuth = 90.0
+            import imageio.v2 as _imageio
+            _fps = int(round(1.0 / POLICY_DT))
+            model.vis.global_.offwidth = max(args.width, model.vis.global_.offwidth)
+            model.vis.global_.offheight = max(args.height, model.vis.global_.offheight)
+            recorder = {
+                "renderer": mujoco.Renderer(model, height=args.height, width=args.width),
+                "cam": rec_cam,
+                "writer": _imageio.get_writer(args.record, fps=_fps, quality=9,
+                                              macro_block_size=1),
+            }
+            print(f"[record] {args.width}x{args.height} @ {_fps}fps -> {args.record}")
 
     def run_steps(n_steps):
         nonlocal motion_step, last_action
@@ -690,11 +733,18 @@ def main():
             anchor_pos_b, anchor_quat_b = subtract_frame_transform(
                 robot_anchor_pos_w, robot_anchor_quat_w, ref_anchor_pos_w, ref_anchor_quat_w)
             rotmat_b = quat_to_rotmat(anchor_quat_b)
-            obs_np = np.concatenate([
-                obs_command, anchor_pos_b, rotmat_b[:, :2].flatten(),
-                base_lin_vel, base_ang_vel,
-                to_px(joint_pos - default_pos), to_px(joint_vel), last_action,
-            ]).astype(np.float32)
+            if obs_layout == "wo_state_estimation":
+                obs_np = np.concatenate([
+                    obs_command, rotmat_b[:, :2].flatten(),
+                    base_ang_vel,
+                    to_px(joint_pos - default_pos), to_px(joint_vel), last_action,
+                ]).astype(np.float32)
+            else:
+                obs_np = np.concatenate([
+                    obs_command, anchor_pos_b, rotmat_b[:, :2].flatten(),
+                    base_lin_vel, base_ang_vel,
+                    to_px(joint_pos - default_pos), to_px(joint_vel), last_action,
+                ]).astype(np.float32)
             with torch.no_grad():
                 action = actor(normalize_obs(torch.from_numpy(obs_np).unsqueeze(0), normalizer)).squeeze(0).numpy().astype(np.float32)
             last_action = action.copy()
@@ -718,6 +768,9 @@ def main():
             metrics["anchor_pos_err"].append(float(np.linalg.norm(anchor_pos_b)))
             metrics["base_z"].append(float(data.qpos[2]))
             metrics["steps"] += 1
+            if recorder is not None:
+                recorder["renderer"].update_scene(data, camera=recorder["cam"])
+                recorder["writer"].append_data(recorder["renderer"].render())
             motion_step += 1
             if motion_step >= n_motion_steps:
                 print("[playback] motion looped (reset to frame 0, as in training episode reset)")
@@ -732,6 +785,9 @@ def main():
         t0 = time.time()
         run_steps(total)
         wall = time.time() - t0
+        if recorder is not None:
+            recorder["writer"].close()
+            print(f"[record] Video saved: {args.record} ({metrics['steps']} frames)")
         base_z = np.array(metrics["base_z"])
         summary = {
             "robot": args.robot,
@@ -801,17 +857,28 @@ def main():
             # 8. last_action
             obs_last_action = last_action  # (n_dof,)
 
-            # Concatenate all terms
-            obs_np = np.concatenate([
-                obs_command,           # 2*n_dof
-                obs_anchor_pos_b,      # 3
-                obs_anchor_ori_b,      # 6
-                obs_base_lin_vel,      # 3
-                obs_base_ang_vel,      # 3
-                obs_joint_pos_rel,     # n_dof
-                obs_joint_vel,         # n_dof
-                obs_last_action,       # n_dof
-            ]).astype(np.float32)
+            # Concatenate all terms (layout depends on the trained policy:
+            # Wo-State-Estimation policies drop anchor_pos_b and base_lin_vel)
+            if obs_layout == "wo_state_estimation":
+                obs_np = np.concatenate([
+                    obs_command,           # 2*n_dof
+                    obs_anchor_ori_b,      # 6
+                    obs_base_ang_vel,      # 3
+                    obs_joint_pos_rel,     # n_dof
+                    obs_joint_vel,         # n_dof
+                    obs_last_action,       # n_dof
+                ]).astype(np.float32)
+            else:
+                obs_np = np.concatenate([
+                    obs_command,           # 2*n_dof
+                    obs_anchor_pos_b,      # 3
+                    obs_anchor_ori_b,      # 6
+                    obs_base_lin_vel,      # 3
+                    obs_base_ang_vel,      # 3
+                    obs_joint_pos_rel,     # n_dof
+                    obs_joint_vel,         # n_dof
+                    obs_last_action,       # n_dof
+                ]).astype(np.float32)
 
             # ── Normalize observation ──
             obs_tensor = torch.from_numpy(obs_np).unsqueeze(0).to(device)
