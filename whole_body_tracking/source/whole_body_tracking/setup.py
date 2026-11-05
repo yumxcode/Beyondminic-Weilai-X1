@@ -10,12 +10,14 @@ EXTENSION_PATH = os.path.dirname(os.path.realpath(__file__))
 # Read the extension.toml file
 EXTENSION_TOML_DATA = toml.load(os.path.join(EXTENSION_PATH, "config", "extension.toml"))
 
-# Minimum dependencies required prior to installation
-INSTALL_REQUIRES = [
-    "psutil",
-    "onnxscript",
-    "wandb>=0.19",
-]
+# Minimum dependencies required prior to installation.
+# EMPTY on purpose: the gradmotion IsaacLab image already provides every
+# runtime dep (psutil, wandb 0.12.21, torch, ...), and the platform harness
+# auto-runs `pip install -e` on this setup.py WITHOUT --no-deps — any entry
+# here (e.g. onnxscript) cascades into a numpy 2.x upgrade that breaks
+# isaac-sim's numpy 1.26.4 (TASK_20261105_423/427 both died this way).
+# onnxscript is only needed for policy export, install it manually then.
+INSTALL_REQUIRES = []
 
 # Installation operation
 setup(
