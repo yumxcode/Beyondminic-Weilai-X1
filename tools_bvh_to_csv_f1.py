@@ -191,6 +191,14 @@ def main() -> None:
     motion[:, 3:7] = motion[:, [4, 5, 6, 3]]
     motion[:, 3:7] = make_quaternions_continuous(motion[:, 3:7])
 
+    # Reorder joint columns from raw qpos (MJCF definition order — F1 URDF lists
+    # legs BEFORE lumbar/arms) into the canonical F1_JOINT_NAMES order. X1's
+    # two orders coincided; F1's do not, so the explicit remap is required.
+    reordered = np.zeros_like(motion)
+    reordered[:, 0:7] = motion[:, 0:7]
+    reordered[:, 7:] = motion[:, qpos_adrs]
+    motion = reordered
+
     out = args.output_file.expanduser().resolve()
     out.parent.mkdir(parents=True, exist_ok=True)
     np.savetxt(out, motion, delimiter=",", fmt="%.8f")

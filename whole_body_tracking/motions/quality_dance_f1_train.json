@@ -1,0 +1,49 @@
+{
+  "frames": 689,
+  "fps": 30,
+  "ground": {
+    "min_foot_z_m": -0.014391702208727193,
+    "frame": 688,
+    "pass": true,
+    "threshold_m": -0.015
+  },
+  "self_penetration": {
+    "min_pair_distance_m": 0.06931231254069636,
+    "pair": [
+      "left_ankle_roll_link",
+      "right_ankle_roll_link"
+    ],
+    "frame": 154,
+    "pass": true,
+    "threshold_m": 0.005
+  },
+  "joint_limits": {
+    "violations": 0,
+    "examples": [],
+    "pass": true
+  },
+  "joint_velocities": {
+    "exceeding": [],
+    "margin": 1.5,
+    "pass": true
+  },
+  "root_height": {
+    "min_m": 0.54409719,
+    "max_m": 0.60626781,
+    "band": [
+      0.35,
+      1.0
+    ],
+    "pass": true
+  },
+  "continuity": {
+    "pass": true,
+    "quat_continuous": true,
+    "finite": true
+  },
+  "jerk_advisory": {
+    "max_ang_acc_rad_s2": 103.38353999999984,
+    "gating": false
+  },
+  "overall_pass": true
+}
