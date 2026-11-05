@@ -753,18 +753,49 @@ def main():
         # PhysX BFS with an alphabetical queue over the F1 URDF tree
         # (same convention as the verified X1 order; check against the
         # trained checkpoint's obs-normalizer means after training).
-        F1_PHYSX_JOINT_ORDER = [
-            "left_hip_pitch_joint", "lumbar_yaw_joint", "right_hip_pitch_joint",
-            "left_hip_roll_joint", "lumbar_roll_joint", "right_hip_roll_joint",
-            "left_hip_yaw_joint", "lumbar_pitch_joint", "right_hip_yaw_joint",
-            "left_knee_pitch_joint", "left_shoulder_pitch_joint", "right_knee_pitch_joint", "right_shoulder_pitch_joint",
-            "left_ankle_pitch_joint", "left_shoulder_roll_joint", "right_ankle_pitch_joint", "right_shoulder_roll_joint",
-            "left_ankle_roll_joint", "left_shoulder_yaw_joint", "right_ankle_roll_joint", "right_shoulder_yaw_joint",
-            "left_elbow_pitch_joint", "right_elbow_pitch_joint",
-            "left_elbow_yaw_joint", "right_elbow_yaw_joint",
-            "left_wrist_pitch_joint", "right_wrist_pitch_joint",
-            "left_wrist_roll_joint", "right_wrist_roll_joint",
-        ]
+        import os as _os
+        _order_json = _os.environ.get("F1_PHYSX_ORDER_JSON")
+        if _order_json:
+            import json as _json
+            F1_PHYSX_JOINT_ORDER = _json.load(open(_order_json))
+            print(f"[perm] F1 order loaded from {_order_json}")
+        else:
+            # GROUND TRUTH from TASK_20261105_507 (probe_f1_order.py printed
+            # robot.joint_names on gradmotion): FIFO BFS over the F1 URDF tree
+            # (children in URDF element order — shoulders sort BEFORE the
+            # knees/ankles of the same wave; NOT the alphabetical variant the
+            # X1 tree produced).
+            F1_PHYSX_JOINT_ORDER = [
+                            "left_hip_pitch_joint",
+                            "lumbar_yaw_joint",
+                            "right_hip_pitch_joint",
+                            "left_hip_roll_joint",
+                            "lumbar_roll_joint",
+                            "right_hip_roll_joint",
+                            "left_hip_yaw_joint",
+                            "lumbar_pitch_joint",
+                            "right_hip_yaw_joint",
+                            "left_knee_pitch_joint",
+                            "left_shoulder_pitch_joint",
+                            "right_shoulder_pitch_joint",
+                            "right_knee_pitch_joint",
+                            "left_ankle_pitch_joint",
+                            "left_shoulder_roll_joint",
+                            "right_shoulder_roll_joint",
+                            "right_ankle_pitch_joint",
+                            "left_ankle_roll_joint",
+                            "left_shoulder_yaw_joint",
+                            "right_shoulder_yaw_joint",
+                            "right_ankle_roll_joint",
+                            "left_elbow_pitch_joint",
+                            "right_elbow_pitch_joint",
+                            "left_elbow_yaw_joint",
+                            "right_elbow_yaw_joint",
+                            "left_wrist_pitch_joint",
+                            "right_wrist_pitch_joint",
+                            "left_wrist_roll_joint",
+                            "right_wrist_roll_joint"
+            ]
         _px_index = {n: i for i, n in enumerate(F1_PHYSX_JOINT_ORDER)}
         _mj_to_px = np.array([_px_index[n] for n in joint_names_dof], dtype=int)
         _mj_to_px_inv = np.argsort(_mj_to_px)
