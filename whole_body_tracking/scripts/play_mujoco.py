@@ -140,6 +140,44 @@ _X1_DEFAULT_JOINT_POS = {
 
 X1_INIT_HEIGHT = 0.61
 
+# ─────────────────────────────────────────────────────────────
+#  F1 robot parameters (mirrors robots/f1.py; see F1_29DOF/F1_AUDIT.md)
+# ─────────────────────────────────────────────────────────────
+
+# F1 leg gains from URDF standing-pose inertia + estimated armature
+# (no lab ID for F1); upper body identical links -> X1 PlanB values.
+# joint regex -> (effort_limit, armature, kp, kd)
+_F1_JOINT_CLASS = [
+    (r".*_hip_pitch_joint", 130.0, 0.15, 70.0, 8.0),
+    (r".*_hip_roll_joint", 130.0, 0.15, 60.0, 8.0),
+    (r".*_hip_yaw_joint", 130.0, 0.02, 90.0, 2.0),
+    (r".*_knee_pitch_joint", 130.0, 0.20, 90.0, 6.0),
+    (r".*_ankle_pitch_joint", 241.875, 0.01, 60.0, 1.0),
+    (r".*_ankle_roll_joint", 218.4, 0.01, 45.0, 0.6),
+    (r"lumbar_yaw_joint", 150.0, 0.022, 90.0, 8.0),
+    (r"lumbar_roll_joint", 150.0, 0.021, 70.0, 8.0),
+    (r"lumbar_pitch_joint", 180.0, 0.012, 100.0, 8.0),
+    (r".*_shoulder_pitch_joint", 20.0, 0.020, 40.0, 4.0),
+    (r".*_shoulder_roll_joint", 20.0, 0.013, 40.0, 4.0),
+    (r".*_shoulder_yaw_joint", 20.0, 0.010, 40.0, 2.0),
+    (r".*_elbow_pitch_joint", 20.0, 0.010, 30.0, 1.9),
+    (r".*_elbow_yaw_joint", 20.0, 0.010, 20.0, 1.0),
+    (r".*_wrist_pitch_joint", 10.0, 0.010, 15.0, 1.0),
+    (r".*_wrist_roll_joint", 10.0, 0.010, 15.0, 1.0),
+]
+
+# F1 standing keyframe (F1_29DOF/mjcf/robot/f1/f1_stand.json, symmetric)
+_F1_DEFAULT_JOINT_POS = {
+    "left_hip_pitch_joint": -0.2915,
+    "left_knee_pitch_joint": 0.4500,
+    "left_ankle_pitch_joint": -0.1585,
+    "right_hip_pitch_joint": -0.2915,
+    "right_knee_pitch_joint": 0.4500,
+    "right_ankle_pitch_joint": -0.1585,
+}
+
+F1_INIT_HEIGHT = 0.588
+
 # X1 npz body order: PhysX BFS over the merged-fixed-joint URDF tree
 X1_NPZ_BODY_ORDER = [
     "base_link",                     # 0
@@ -207,6 +245,11 @@ def _match_joint_params_auto(joint_name: str) -> tuple[float, float, float]:
             if _re.fullmatch(pattern, joint_name):
                 return (effort, kp, kd)
         raise ValueError(f"No matching X1 params for joint: {joint_name}")
+    if _ROBOT == "f1":
+        for pattern, effort, _armature, kp, kd in _F1_JOINT_CLASS:
+            if _re.fullmatch(pattern, joint_name):
+                return (effort, kp, kd)
+        raise ValueError(f"No matching F1 params for joint: {joint_name}")
     return _match_joint_params(joint_name)
 
 
@@ -228,9 +271,12 @@ def build_joint_arrays(joint_names: list[str]):
 
     for i, name in enumerate(joint_names):
         effort, k_p, k_d = _match_joint_params_auto(name)
-        default_pos[i] = (
-            _X1_DEFAULT_JOINT_POS.get(name, 0.0) if _ROBOT == "x1" else _match_default_pos(name)
-        )
+        if _ROBOT == "x1":
+            default_pos[i] = _X1_DEFAULT_JOINT_POS.get(name, 0.0)
+        elif _ROBOT == "f1":
+            default_pos[i] = _F1_DEFAULT_JOINT_POS.get(name, 0.0)
+        else:
+            default_pos[i] = _match_default_pos(name)
         kp[i] = k_p
         kd[i] = k_d
         # action_scale = 0.25 * effort_limit / stiffness  (from g1.py)
@@ -414,7 +460,7 @@ def main():
                         help="Disable observation normalization")
     parser.add_argument("--seed", type=int, default=None,
                         help="Random seed")
-    parser.add_argument("--robot", choices=["g1", "x1"], default="g1",
+    parser.add_argument("--robot", choices=["g1", "x1", "f1"], default="g1",
                         help="Robot type (joint gains, defaults, anchor, body order)")
     parser.add_argument("--headless", action="store_true",
                         help="No viewer: run metrics-only sim2sim evaluation")
@@ -445,6 +491,12 @@ def main():
                 repo_root,
                 "source", "whole_body_tracking", "whole_body_tracking",
                 "assets", "xyber_x1", "mjcf", "xyber_x1_flat.xml",
+            )
+        elif args.robot == "f1":
+            args.mjcf = os.path.join(
+                repo_root,
+                "source", "whole_body_tracking", "whole_body_tracking",
+                "assets", "f1", "mjcf", "f1_flat.xml",
             )
         else:
             args.mjcf = os.path.join(
@@ -491,6 +543,17 @@ def main():
                     model.dof_frictionloss[_dadr] = 0.0
                     break
         print("[dynamics] X1 armature/damping aligned with IsaacLab training model")
+    elif args.robot == "f1":
+        for _i, _nm in enumerate(joint_names_dof):
+            for _pat, _effort, _arm, _kp, _kd in _F1_JOINT_CLASS:
+                import re as _re2
+                if _re2.fullmatch(_pat, _nm):
+                    _dadr = model.jnt_dofadr[model.joint(_nm).id]
+                    model.dof_armature[_dadr] = _arm
+                    model.dof_damping[_dadr] = 0.0
+                    model.dof_frictionloss[_dadr] = 0.0
+                    break
+        print("[dynamics] F1 armature/damping aligned with IsaacLab training model")
 
     # Actuator transmission map: MuJoCo actuator order (legs, lumbar, arms in
     # the X1 MJCF) differs from the joint tree order (lumbar, arms, legs).
@@ -519,6 +582,17 @@ def main():
     n_motion_steps = ref_joint_pos.shape[0]
     print(f"[motion] Loaded: {n_motion_steps} frames, fps={motion_fps}")
     print(f"[motion] joint_pos shape: {ref_joint_pos.shape}, body_pos_w shape: {ref_body_pos_w.shape}")
+
+    # Joint order: npz stores its own canonical order (joint_names); the MuJoCo
+    # model uses its serial tree order (F1 lists legs BEFORE lumbar/arms, X1's
+    # two orders coincide). Remap by name — identity for X1 npz files.
+    if "joint_names" in motion_data:
+        _npz_joint_names = [str(n) for n in motion_data["joint_names"]]
+        _perm = [_npz_joint_names.index(n) for n in joint_names_dof]
+        if _perm != list(range(len(_perm))):
+            ref_joint_pos = ref_joint_pos[:, _perm]
+            ref_joint_vel = ref_joint_vel[:, _perm]
+            print(f"[motion] joint columns remapped by name (npz order -> MJCF order)")
 
     # Map body names to .npz body indices.
     # Newer npz files (csv_to_npz.py / tools_csv_to_npz_x1_local.py) store
@@ -563,7 +637,7 @@ def main():
             "left_wrist_yaw_link",       # 28
             "right_wrist_yaw_link",      # 29
         ]
-    anchor_body_name = "lumbar_pitch_link" if args.robot == "x1" else "torso_link"
+    anchor_body_name = "lumbar_pitch_link" if args.robot in ("x1", "f1") else "torso_link"
     anchor_npz_idx = NPZ_BODY_ORDER.index(anchor_body_name)
 
     # Get MuJoCo body ID for the anchor
@@ -675,6 +749,32 @@ def main():
             # px-order vector -> mj-order vector: v_mj = v_px[P]
             return v[_mj_to_px]
         print("[perm] X1 PhysX<->MuJoCo joint order active")
+    elif args.robot == "f1":
+        # PhysX BFS with an alphabetical queue over the F1 URDF tree
+        # (same convention as the verified X1 order; check against the
+        # trained checkpoint's obs-normalizer means after training).
+        F1_PHYSX_JOINT_ORDER = [
+            "left_hip_pitch_joint", "lumbar_yaw_joint", "right_hip_pitch_joint",
+            "left_hip_roll_joint", "lumbar_roll_joint", "right_hip_roll_joint",
+            "left_hip_yaw_joint", "lumbar_pitch_joint", "right_hip_yaw_joint",
+            "left_knee_pitch_joint", "left_shoulder_pitch_joint", "right_knee_pitch_joint", "right_shoulder_pitch_joint",
+            "left_ankle_pitch_joint", "left_shoulder_roll_joint", "right_ankle_pitch_joint", "right_shoulder_roll_joint",
+            "left_ankle_roll_joint", "left_shoulder_yaw_joint", "right_ankle_roll_joint", "right_shoulder_yaw_joint",
+            "left_elbow_pitch_joint", "right_elbow_pitch_joint",
+            "left_elbow_yaw_joint", "right_elbow_yaw_joint",
+            "left_wrist_pitch_joint", "right_wrist_pitch_joint",
+            "left_wrist_roll_joint", "right_wrist_roll_joint",
+        ]
+        _px_index = {n: i for i, n in enumerate(F1_PHYSX_JOINT_ORDER)}
+        _mj_to_px = np.array([_px_index[n] for n in joint_names_dof], dtype=int)
+        _mj_to_px_inv = np.argsort(_mj_to_px)
+
+        def to_px(v):
+            return v[_mj_to_px_inv]
+
+        def from_px(v):
+            return v[_mj_to_px]
+        print("[perm] F1 PhysX<->MuJoCo joint order active")
     else:
         def to_px(v):
             return v
