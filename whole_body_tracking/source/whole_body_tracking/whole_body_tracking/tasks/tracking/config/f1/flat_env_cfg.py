@@ -2,6 +2,7 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils import configclass
 
 from whole_body_tracking.robots.f1 import F1_ACTION_SCALE, F1_CYLINDER_CFG
+from whole_body_tracking.tasks.tracking.mdp.terminations import bad_anchor_pos
 from whole_body_tracking.tasks.tracking.tracking_env_cfg import TrackingEnvCfg
 
 
@@ -13,6 +14,17 @@ class F1FlatEnvCfg(TrackingEnvCfg):
         self.scene.robot = F1_CYLINDER_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
         self.actions.joint_pos.scale = F1_ACTION_SCALE
         self.commands.motion.anchor_body_name = "lumbar_pitch_link"
+
+        # Travel-dance termination: the base class only terminates on the
+        # anchor HEIGHT error (z-only 0.25 m), which lets horizontal lag grow
+        # unchecked — the CMU137 travel run (TASK_20261105_558) converged with
+        # a 0.47 m global anchor lag in training, which sim2sim amplified to
+        # 2.2 m via an out-of-distribution anchor_pos_b feedback loop (42%
+        # travel retention). Terminate on the FULL anchor error instead
+        # (0.5 m = 13% of the 3.7 m clip travel) so the pruning pressure
+        # applies to horizontal tracking too.
+        self.terminations.anchor_pos.func = bad_anchor_pos
+        self.terminations.anchor_pos.params = {"command_name": "motion", "threshold": 0.5}
         # F1 leg links lack the _link suffix in the URDF (Isaac body names).
         self.commands.motion.body_names = [
             "base_link",

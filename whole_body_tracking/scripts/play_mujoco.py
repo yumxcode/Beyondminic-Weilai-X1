@@ -855,6 +855,8 @@ def main():
 
     def run_steps(n_steps):
         nonlocal motion_step, last_action
+        if "zscore_buf" not in metrics:
+            metrics["zscore_buf"] = []
         for _ in range(n_steps):
             t = min(motion_step, n_motion_steps - 1)
             robot_anchor_pos_w = data.xpos[anchor_body_mj_id].copy()
@@ -886,6 +888,9 @@ def main():
                     base_lin_vel, base_ang_vel,
                     to_px(joint_pos - default_pos), to_px(joint_vel), last_action,
                 ]).astype(np.float32)
+            if normalizer is not None:
+                mean, std = normalizer
+                metrics["zscore_buf"].append(((obs_np - mean.cpu().numpy()) / std.cpu().numpy()))
             with torch.no_grad():
                 action = actor(normalize_obs(torch.from_numpy(obs_np).unsqueeze(0), normalizer)).squeeze(0).numpy().astype(np.float32)
             last_action = action.copy()
@@ -948,6 +953,22 @@ def main():
             recorder["writer"].close()
             print(f"[record] Video saved: {args.record} ({metrics['steps']} frames)")
         base_z = np.array(metrics["base_z"])
+        if "zscore_buf" in metrics and metrics["zscore_buf"]:
+            zs = np.abs(np.stack(metrics["zscore_buf"]))  # (T, obs_dim)
+            zs = zs.reshape(zs.shape[0], -1)
+            seg = [("command", 0, 2 * action_dim),
+                   ("anchor_pos_b", 2 * action_dim, 2 * action_dim + 3),
+                   ("anchor_ori_b", 2 * action_dim + 3, 2 * action_dim + 9),
+                   ("base_lin_vel", 2 * action_dim + 9, 2 * action_dim + 12),
+                   ("base_ang_vel", 2 * action_dim + 12, 2 * action_dim + 15),
+                   ("joint_pos", 2 * action_dim + 15, 3 * action_dim + 15),
+                   ("joint_vel", 3 * action_dim + 15, 4 * action_dim + 15),
+                   ("action", 4 * action_dim + 15, 5 * action_dim + 15)]
+            print("[zscore] |z| mean / p95 / max per obs segment "
+                  "(>3 sigma marks OOD vs training normalizer):")
+            for name, a, b in seg:
+                z = zs[:, a:b]
+                print(f"  {name:14s} {z.mean():7.2f} {np.percentile(z, 95):7.2f} {z.max():8.2f}")
         if args.dump_metrics:
             np.savez(
                 args.dump_metrics,
