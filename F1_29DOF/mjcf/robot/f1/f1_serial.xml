@@ -1,6 +1,8 @@
 <mujoco model="F1_29dof">
   <compiler angle="radian" meshdir="meshes/"/>
 
+  <option timestep="0.001"/>
+
   <size nkey="1"/>
 
   <asset>

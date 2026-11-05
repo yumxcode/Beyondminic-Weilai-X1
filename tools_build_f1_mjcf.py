@@ -273,6 +273,9 @@ def main():
     src.write_text(urdf_text)
     spec = mujoco.MjSpec.from_file(str(src))
 
+    # X1 recipe: 1 ms timestep (explicit-PD stability + sim2sim parity)
+    spec.option.timestep = 0.001
+
     # hide collision meshes (group 3), keep contact behavior — visual geoms are
     # group 1 after URDF import; collision geoms default to visible group 0
     for g in spec.geoms:

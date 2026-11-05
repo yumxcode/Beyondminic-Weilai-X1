@@ -1,6 +1,6 @@
 # F1_29DOF 资产审计与 kp/kd 定稿
 
-日期：2026-11-05 ｜ 来源：`F1_29DOF/urdf/SYS-SPEC-0002-V1.1-F1整机模型29DOF.urdf`（commit c0e0ef6）
+日期：2026-11-05（rev2：timestep 0.001 对齐 X1、qfrc_bias 重力矩、I+armature 对账、X1 基线门标定）｜ 来源：`F1_29DOF/urdf/SYS-SPEC-0002-V1.1-F1整机模型29DOF.urdf`（commit c0e0ef6）
 工具：`tools_audit_f1.py`（审计）、`tools_convert_f1_meshes.py` + 扁平化导出（网格）、`tools_build_f1_mjcf.py`（资产构建）、`tools_f1_kp_kd.py`（增益推导）
 
 ## 1. 结构审计
@@ -32,7 +32,7 @@
 
 | 文件 | 用途 |
 |---|---|
-| `F1_29DOF/mjcf/robot/f1/f1_serial.xml` | MuJoCo serial（29 motor、63 sensor 按 X1 顺序、8 足底角点接触球 + 腿/骨盆 collision mesh、keyframe stand） |
+| `F1_29DOF/mjcf/robot/f1/f1_serial.xml` | MuJoCo serial（timestep 0.001、29 motor、63 sensor 按 X1 顺序、8 足底角点接触球 + 腿/骨盆 collision mesh、keyframe stand） |
 | `F1_29DOF/mjcf/f1_flat.xml` | 场景（含 floor） |
 | `whole_body_tracking/.../assets/f1/mjcf/` | 训练/sim2sim 用副本（play_mujoco 自动探测 `assets/f1/mjcf/f1_flat.xml`） |
 | `whole_body_tracking/.../assets/f1/urdf/f1.urdf` | Isaac URDF（30 link 树 + sim 网格） |
@@ -58,8 +58,12 @@
 | elbow_p/y | 30/20 | 1.9/1.0 | 0.010/0.005 | — | ~0.7–1.1 | ~3.5–6.8 |
 | wrist_p/r | 15 | 1.0 | 0.005 | — | ~1.2 | ~5.9 |
 
-**验证**：焊接基座保持测试（3° 扰动，PD 保持站立目标，2 s @1 ms）→ 收敛到最大下垂 1.23°（hip_pitch），均值 0.29°，**PASS**。
-说明：自由站立不能靠关节 PD 单独稳定（线性化 mgh ≈ 216 N·m/rad ≫ 踝 kp）——平衡是训练策略的职责，与 X1（踝 kp=50）相同；本测试只验证增益的机械保形能力。
+**验证（门校准后）**：
+- 焊接基座保持测试（3° 扰动，PD 保持站立目标，2 s @1 ms）→ 收敛到最大下垂 1.23°（hip_pitch），均值 0.29°，**PASS**（机械保形门）。
+- 自由站立 PD-hold 门**经 X1 基线标定为无效**：X1 模型 + X1 sim2sim 验证过的方案 B 增益同样 3 s 内倒下（0.610→0.073 m）。自由站立是策略职责（线性化 mgh：X1≈183、F1≈216 N·m/rad ≫ 双踝 kp），"增益是 F1 倒塌根因"的假设被证伪。
+- 站立位 qfrc_bias 重力矩（修正零位误差）：hip_pitch 2.23、knee 1.30 Nm → PD 静态下垂 ≤1.83°，与焊接基座实测一致。
+- ζ/fn 按 I_eff = I_stand + armature 对账：ζ 0.41–0.55，fn 髋 1.3 / 膝 2.3 / 踝 ~10 Hz；kd·dt/I_eff < 0.8 在 1 ms（max 0.07）与 sim2sim 5 ms 物理（max 0.36）下均满足。
+- 踝 kd 与 X1 差 ~5 倍的对账：X1 I_tot 0.15/0.035 含实验室辨识转子 armature；F1 裸惯量 0.004/0.0013 + 估计 armature 0.01 → I_eff ~10× 小，kd 相应小，两者 ζ 同带。armature 为未验证估计，sim2sim 时由 play_mujoco 注入（与 X1 配方一致，MJCF 本体只带厂商阻尼）。
 
 ## 5. 已知限制
 

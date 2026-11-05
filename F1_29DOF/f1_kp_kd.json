@@ -8,8 +8,13 @@
       "effort": 130.0,
       "vel": 14.66,
       "I_stand": 0.839,
-      "zeta": 0.52,
-      "fn_hz": 1.45
+      "zeta": 0.48,
+      "fn_hz": 1.34,
+      "tau_g": 2.23,
+      "I_eff": 0.989,
+      "sag_deg": 1.83,
+      "kd_dt_I_1ms": 0.01,
+      "kd_dt_I_5ms": 0.04
     },
     "hip_roll": {
       "kp": 60.0,
@@ -18,8 +23,13 @@
       "effort": 130.0,
       "vel": 14.66,
       "I_stand": 0.789,
-      "zeta": 0.58,
-      "fn_hz": 1.39
+      "zeta": 0.53,
+      "fn_hz": 1.27,
+      "tau_g": 0.24,
+      "I_eff": 0.939,
+      "sag_deg": 0.23,
+      "kd_dt_I_1ms": 0.01,
+      "kd_dt_I_5ms": 0.04
     },
     "hip_yaw": {
       "kp": 90.0,
@@ -29,7 +39,12 @@
       "vel": 14.66,
       "I_stand": 0.047,
       "zeta": 0.41,
-      "fn_hz": 6.96
+      "fn_hz": 5.83,
+      "tau_g": 0.07,
+      "I_eff": 0.067,
+      "sag_deg": 0.05,
+      "kd_dt_I_1ms": 0.03,
+      "kd_dt_I_5ms": 0.15
     },
     "knee_pitch": {
       "kp": 90.0,
@@ -38,8 +53,13 @@
       "effort": 130.0,
       "vel": 14.66,
       "I_stand": 0.229,
-      "zeta": 0.66,
-      "fn_hz": 3.15
+      "zeta": 0.48,
+      "fn_hz": 2.31,
+      "tau_g": 1.3,
+      "I_eff": 0.429,
+      "sag_deg": 0.83,
+      "kd_dt_I_1ms": 0.01,
+      "kd_dt_I_5ms": 0.07
     },
     "ankle_pitch": {
       "kp": 60.0,
@@ -48,8 +68,13 @@
       "effort": 241.875,
       "vel": 7.57244,
       "I_stand": 0.004,
-      "zeta": 1.02,
-      "fn_hz": 19.56
+      "zeta": 0.55,
+      "fn_hz": 10.42,
+      "tau_g": 0.01,
+      "I_eff": 0.014,
+      "sag_deg": 0.01,
+      "kd_dt_I_1ms": 0.07,
+      "kd_dt_I_5ms": 0.36
     },
     "ankle_roll": {
       "kp": 45.0,
@@ -58,8 +83,13 @@
       "effort": 218.4,
       "vel": 8.05007,
       "I_stand": 0.0013,
-      "zeta": 1.26,
-      "fn_hz": 30.06
+      "zeta": 0.42,
+      "fn_hz": 10.04,
+      "tau_g": 0.02,
+      "I_eff": 0.0113,
+      "sag_deg": 0.02,
+      "kd_dt_I_1ms": 0.05,
+      "kd_dt_I_5ms": 0.27
     }
   },
   "upper_x1_planB": {
@@ -106,7 +136,9 @@
   },
   "validation": {
     "welded_base_hold": "PASS: 3deg perturbation settles to max 1.23 deg sag (hip_pitch), mean 0.29 deg, 2 s @1 ms",
-    "pd_free_stand": "not achievable by joint PD alone (linearized m*g*h = 216 Nm/rad >> ankle kp) \u2014 balance is the policy's job, same as X1"
+    "pd_free_stand": "INVALID GATE \u2014 X1 baseline calibration: X1 model + X1 sim2sim-proven gains (PlanB) also falls (0.610->0.073 m in 3 s). Free standing is a policy job (linearized mgh: X1 ~183, F1 ~216 Nm/rad >> ankle kp); gains are NOT the root cause of the F1 fall.",
+    "kd_dt_I_stability": "kd*dt/I_eff < 0.8 satisfied at dt=1ms (max 0.07) and dt=5ms sim2sim physics (max 0.36), I_eff = I_stand + armature"
   },
-  "notes": "legs derived from F1 URDF standing-pose subtree inertia (no lab ID for F1); kp chosen in the X1-proven bandwidth band (hips 1.4-1.8 Hz, knee 3.2 Hz), kd from zeta 0.4-0.7 capped at 8 (MIT encoding, same host-stack constraint as X1); armature scaled from X1 identified values by torque class 130/180 \u2014 unverified estimate; upper body links/joints byte-identical to X1 -> X1 PlanB identified gains reused verbatim"
+  "notes": "legs derived from F1 URDF standing-pose subtree inertia + estimated rotor armature (no lab ID for F1; armature scaled from X1 identified values by torque class 130/180 \u2014 unverified); kp chosen in the X1-proven bandwidth band (hips ~1.3 Hz, knee 2.3 Hz, ankles ~10 Hz on 10x lighter ankles); kd from zeta 0.4-0.55 capped at 8 (MIT encoding, same host-stack constraint as X1); gravity torques evaluated at the stand keyframe via qfrc_bias; upper body links/joints byte-identical to X1 -> X1 PlanB identified gains reused verbatim; armature injected at play time (play_mujoco) as in the X1 recipe, MJCF itself carries vendor damping only",
+  "ankle_vs_x1_reconciliation": "X1 ankle I_tot 0.15/0.035 kg*m^2 INCLUDES lab-identified rotor armature (0.15/0.035); F1 bare link inertia is 0.004/0.0013 + estimated armature 0.01 -> I_eff 0.014/0.011. The ~5x lower F1 kd follows from the ~10x lower reflected inertia; both reach zeta 0.4-0.7."
 }
