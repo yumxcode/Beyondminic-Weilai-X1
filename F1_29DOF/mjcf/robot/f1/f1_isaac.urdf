@@ -1,6 +1,6 @@
 <robot name="F1_29dof">
   
-  <mujoco><compiler meshdir="../meshes" balanceinertia="true" discardvisual="false" fusestatic="false" strippath="false" angle="radian" /></mujoco><link name="base_link">
+  <mujoco><compiler meshdir="" balanceinertia="true" discardvisual="false" fusestatic="false" strippath="false" angle="radian" /></mujoco><link name="base_link">
     <inertial>
       <origin xyz="-0.000254894 -5.56626e-07 0.0586585" rpy="0 0 0" />
       <mass value="3.39205" />
@@ -9,13 +9,13 @@
     <visual name="base_link_visual">
       <origin xyz="-0 -0 -0" rpy="1.5708 0 1.5708" />
       <geometry>
-        <mesh filename="base_link.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="../meshes/base_link.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </visual>
     <collision name="base_link_collision">
       <origin xyz="-0 -0 -0" rpy="1.5708 0 1.5708" />
       <geometry>
-        <mesh filename="c_base_link.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="../meshes/c_base_link.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </collision>
   </link>
@@ -28,13 +28,13 @@
     <visual name="left_ankle_pitch_visual">
       <origin xyz="-0 -0.156 0.566" rpy="1.5708 0 1.5708" />
       <geometry>
-        <mesh filename="left_ankle_pitch.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="../meshes/left_ankle_pitch.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </visual>
     <collision name="left_ankle_pitch_collision">
       <origin xyz="-0 -0.156 0.566" rpy="1.5708 0 1.5708" />
       <geometry>
-        <mesh filename="c_left_ankle_pitch.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="../meshes/c_left_ankle_pitch.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </collision>
   </link>
@@ -47,13 +47,13 @@
     <visual name="left_ankle_roll_visual">
       <origin xyz="-0 -0.156 0.566" rpy="1.5708 0 1.5708" />
       <geometry>
-        <mesh filename="left_ankle_roll.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="../meshes/left_ankle_roll.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </visual>
     <collision name="left_ankle_roll_collision">
       <origin xyz="-0 -0.156 0.566" rpy="1.5708 0 1.5708" />
       <geometry>
-        <mesh filename="c_left_ankle_roll.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="../meshes/c_left_ankle_roll.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </collision>
   </link>
@@ -66,13 +66,13 @@
     <visual name="left_hip_pitch_visual">
       <origin xyz="-0 -0.06945 -0" rpy="1.5708 0 1.5708" />
       <geometry>
-        <mesh filename="left_hip_pitch.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="../meshes/left_hip_pitch.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </visual>
     <collision name="left_hip_pitch_collision">
       <origin xyz="-0 -0.06945 -0" rpy="1.5708 0 1.5708" />
       <geometry>
-        <mesh filename="c_left_hip_pitch.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="../meshes/c_left_hip_pitch.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </collision>
   </link>
@@ -85,13 +85,13 @@
     <visual name="left_hip_roll_visual">
       <origin xyz="-0.02835 -0.1545 -0" rpy="1.5708 0 1.5708" />
       <geometry>
-        <mesh filename="left_hip_roll.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="../meshes/left_hip_roll.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </visual>
     <collision name="left_hip_roll_collision">
       <origin xyz="-0.02835 -0.1545 -0" rpy="1.5708 0 1.5708" />
       <geometry>
-        <mesh filename="c_left_hip_roll.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="../meshes/c_left_hip_roll.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </collision>
   </link>
@@ -104,13 +104,13 @@
     <visual name="left_hip_yaw_visual">
       <origin xyz="0.01 -0.1545 0.10005" rpy="1.5708 0 1.5708" />
       <geometry>
-        <mesh filename="left_hip_yaw.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="../meshes/left_hip_yaw.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </visual>
     <collision name="left_hip_yaw_collision">
       <origin xyz="0.01 -0.1545 0.10005" rpy="1.5708 0 1.5708" />
       <geometry>
-        <mesh filename="c_left_hip_yaw.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="../meshes/c_left_hip_yaw.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </collision>
   </link>
@@ -123,13 +123,13 @@
     <visual name="left_knee_pitch_visual">
       <origin xyz="-0 -0.18295 0.236" rpy="1.5708 0 1.5708" />
       <geometry>
-        <mesh filename="left_knee_pitch.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="../meshes/left_knee_pitch.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </visual>
     <collision name="left_knee_pitch_collision">
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="c_left_knee_pitch.stl" scale="1 1 1" />
+        <mesh filename="../meshes/c_left_knee_pitch.stl" scale="1 1 1" />
       </geometry>
     </collision>
   </link>
@@ -142,13 +142,13 @@
     <visual name="right_ankle_pitch_visual">
       <origin xyz="-0 0.156 0.566" rpy="1.5708 0 1.5708" />
       <geometry>
-        <mesh filename="right_ankle_pitch.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="../meshes/right_ankle_pitch.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </visual>
     <collision name="right_ankle_pitch_collision">
       <origin xyz="-0 0.156 0.566" rpy="1.5708 0 1.5708" />
       <geometry>
-        <mesh filename="c_right_ankle_pitch.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="../meshes/c_right_ankle_pitch.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </collision>
   </link>
@@ -161,13 +161,13 @@
     <visual name="right_ankle_roll_visual">
       <origin xyz="-0 0.156 0.566" rpy="1.5708 0 1.5708" />
       <geometry>
-        <mesh filename="right_ankle_roll.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="../meshes/right_ankle_roll.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </visual>
     <collision name="right_ankle_roll_collision">
       <origin xyz="-0 0.156 0.566" rpy="1.5708 0 1.5708" />
       <geometry>
-        <mesh filename="c_right_ankle_roll.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="../meshes/c_right_ankle_roll.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </collision>
   </link>
@@ -180,13 +180,13 @@
     <visual name="right_hip_pitch_visual">
       <origin xyz="-0 0.06945 -0" rpy="1.5708 0 1.5708" />
       <geometry>
-        <mesh filename="right_hip_pitch.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="../meshes/right_hip_pitch.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </visual>
     <collision name="right_hip_pitch_collision">
       <origin xyz="-0 0.06945 -0" rpy="1.5708 0 1.5708" />
       <geometry>
-        <mesh filename="c_right_hip_pitch.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="../meshes/c_right_hip_pitch.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </collision>
   </link>
@@ -199,13 +199,13 @@
     <visual name="right_hip_roll_visual">
       <origin xyz="-0.02835 0.1545 -0" rpy="1.5708 0 1.5708" />
       <geometry>
-        <mesh filename="right_hip_roll.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="../meshes/right_hip_roll.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </visual>
     <collision name="right_hip_roll_collision">
       <origin xyz="-0.02835 0.1545 -0" rpy="1.5708 0 1.5708" />
       <geometry>
-        <mesh filename="c_right_hip_roll.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="../meshes/c_right_hip_roll.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </collision>
   </link>
@@ -218,13 +218,13 @@
     <visual name="right_hip_yaw_visual">
       <origin xyz="0.01 0.1545 0.10005" rpy="1.5708 0 1.5708" />
       <geometry>
-        <mesh filename="right_hip_yaw.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="../meshes/right_hip_yaw.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </visual>
     <collision name="right_hip_yaw_collision">
       <origin xyz="0.01 0.1545 0.10005" rpy="1.5708 0 1.5708" />
       <geometry>
-        <mesh filename="c_right_hip_yaw.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="../meshes/c_right_hip_yaw.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </collision>
   </link>
@@ -237,13 +237,13 @@
     <visual name="right_knee_pitch_visual">
       <origin xyz="-0 0.18295 0.236" rpy="1.5708 0 1.5708" />
       <geometry>
-        <mesh filename="right_knee_pitch.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="../meshes/right_knee_pitch.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </visual>
     <collision name="right_knee_pitch_collision">
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="c_right_knee_pitch.stl" scale="1 1 1" />
+        <mesh filename="../meshes/c_right_knee_pitch.stl" scale="1 1 1" />
       </geometry>
     </collision>
   </link>
@@ -352,7 +352,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="lumbar_yaw_center_symmetric.STL" />
+        <mesh filename="../meshes/lumbar_yaw_center_symmetric.STL" />
       </geometry>
       <material name="lumbar_yaw_material">
         <color rgba="1 0.4 0.4 1" />
@@ -368,7 +368,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="lumbar_roll_center_symmetric.STL" />
+        <mesh filename="../meshes/lumbar_roll_center_symmetric.STL" />
       </geometry>
       <material name="lumbar_roll_material">
         <color rgba="1 0.4 0.4 1" />
@@ -384,7 +384,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="lumbar_pitch_center_symmetric.stl" />
+        <mesh filename="../meshes/lumbar_pitch_center_symmetric.stl" />
       </geometry>
       <material name="lumbar_pitch_material">
         <color rgba="0.4 1 0.4 1" />
@@ -400,7 +400,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="left_shoulder_pitch.STL" />
+        <mesh filename="../meshes/left_shoulder_pitch.STL" />
       </geometry>
       <material name="left_shoulder_pitch_material">
         <color rgba="1 0.4 0.4 1" />
@@ -416,7 +416,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="left_shoulder_roll.STL" />
+        <mesh filename="../meshes/left_shoulder_roll.STL" />
       </geometry>
       <material name="left_shoulder_roll_material">
         <color rgba="1 1 0.4 1" />
@@ -432,7 +432,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="left_shoulder_yaw.STL" />
+        <mesh filename="../meshes/left_shoulder_yaw.STL" />
       </geometry>
       <material name="left_shoulder_yaw_material">
         <color rgba="0.4 1 0.4 1" />
@@ -448,7 +448,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="left_elbow_pitch.STL" />
+        <mesh filename="../meshes/left_elbow_pitch.STL" />
       </geometry>
       <material name="left_elbow_pitch_material">
         <color rgba="0 0.5 1 1" />
@@ -464,7 +464,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="left_elbow_yaw.STL" />
+        <mesh filename="../meshes/left_elbow_yaw.STL" />
       </geometry>
       <material name="left_elbow_yaw_material">
         <color rgba="0.8 1.0 0.8 1" />
@@ -480,7 +480,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="-0 1.5708 0" />
       <geometry>
-        <mesh filename="left_wrist_pitch.STL" />
+        <mesh filename="../meshes/left_wrist_pitch.STL" />
       </geometry>
       <material name="left_wrist_pitch_material">
         <color rgba="1 0.5 1 1" />
@@ -496,7 +496,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="-1.0708 3.66e-06 0.0292034" />
       <geometry>
-        <mesh filename="left_wrist_roll.STL" />
+        <mesh filename="../meshes/left_wrist_roll.STL" />
       </geometry>
       <material name="left_wrist_roll_material">
         <color rgba="1 0.4 0.4 1" />
@@ -512,7 +512,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="right_shoulder_pitch_perfect_mirrored.STL" />
+        <mesh filename="../meshes/right_shoulder_pitch_perfect_mirrored.STL" />
       </geometry>
       <material name="left_shoulder_pitch_material">
         <color rgba="1 0.4 0.4 1" />
@@ -528,7 +528,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="right_shoulder_roll_perfect_mirrored.STL" />
+        <mesh filename="../meshes/right_shoulder_roll_perfect_mirrored.STL" />
       </geometry>
       <material name="left_shoulder_roll_material">
         <color rgba="1 1 0.4 1" />
@@ -544,7 +544,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="right_shoulder_yaw_perfect_mirrored.STL" />
+        <mesh filename="../meshes/right_shoulder_yaw_perfect_mirrored.STL" />
       </geometry>
       <material name="left_shoulder_yaw_material">
         <color rgba="0.4 1 0.4 1" />
@@ -560,7 +560,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="right_elbow_pitch_perfect_mirrored.STL" />
+        <mesh filename="../meshes/right_elbow_pitch_perfect_mirrored.STL" />
       </geometry>
       <material name="left_elbow_pitch_material">
         <color rgba="0 0.5 1 1" />
@@ -576,7 +576,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="right_elbow_yaw_perfect_mirrored.STL" />
+        <mesh filename="../meshes/right_elbow_yaw_perfect_mirrored.STL" />
       </geometry>
       <material name="left_elbow_yaw_material">
         <color rgba="0.8 1.0 0.8 1" />
@@ -592,7 +592,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="3.1415927 1.5707927 3.1415927" />
       <geometry>
-        <mesh filename="right_wrist_pitch_perfect_mirrored.STL" />
+        <mesh filename="../meshes/right_wrist_pitch_perfect_mirrored.STL" />
       </geometry>
       <material name="left_wrist_pitch_material">
         <color rgba="1 0.5 1 1" />
@@ -608,7 +608,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="1.0708 3.66e-06 -0.0292034" />
       <geometry>
-        <mesh filename="right_wrist_roll_perfect_mirrored.STL" />
+        <mesh filename="../meshes/right_wrist_roll_perfect_mirrored.STL" />
       </geometry>
       <material name="left_wrist_roll_material">
         <color rgba="1 0.4 0.4 1" />

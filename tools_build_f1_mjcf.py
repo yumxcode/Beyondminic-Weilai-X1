@@ -78,9 +78,15 @@ URDF_JOINT_ORDER = [
 ]
 
 
-def rewrite_urdf(meshdir: str) -> str:
+def rewrite_urdf(meshdir: str, isaac: bool = False) -> str:
     """Rewrite the vendor URDF: flat sim-mesh names (see mesh export step),
-    drop decoration links/joints. meshdir is baked into the <mujoco><compiler>."""
+    drop decoration links/joints. meshdir is baked into the <mujoco><compiler>.
+
+    isaac=False (MJCF source): bare flat mesh names (compiler meshdir applies).
+    isaac=True  (Isaac URDF) : '../meshes/<flat>' — IsaacLab's URDF converter
+    resolves mesh filenames relative to the URDF file and IGNORES the
+    <mujoco><compiler> tag, so paths must be explicit (X1 recipe).
+    """
     tree = ET.parse(SRC_URDF)
     root = tree.getroot()
     mj = root.find("mujoco")
@@ -97,12 +103,14 @@ def rewrite_urdf(meshdir: str) -> str:
         p_ = fn.replace("../meshes/", "")
         name = Path(p_).name
         if p_.startswith("x1/"):
-            return name
-        if p_.startswith("visual/"):
-            return name
-        if p_.startswith("collision/"):
-            return "c_" + name.replace("_collision", "")
-        return name
+            flat = name
+        elif p_.startswith("visual/"):
+            flat = name
+        elif p_.startswith("collision/"):
+            flat = "c_" + name.replace("_collision", "")
+        else:
+            flat = name
+        return f"../meshes/{flat}" if isaac else flat
 
     for mesh in root.iter("mesh"):
         mesh.set("filename", remap(mesh.get("filename")))
@@ -389,10 +397,20 @@ def main():
           f"keyframe stand sole z={sole:.4f} base z={d.qpos[2]:.4f}")
 
     # ---------------- Isaac URDF (assets/f1: urdf + flat meshes dir) ----------------
-    isaac_urdf = rewrite_urdf("../meshes")
+    WBT = REPO / "whole_body_tracking/source/whole_body_tracking/whole_body_tracking/assets/f1"
+    isaac_urdf = rewrite_urdf("", isaac=True)
     tree = ET.fromstring(isaac_urdf)
     # IsaacLab URDF importer: keep tree; add standing joint values as a note file
-    (OUT_DIR / "f1_isaac.urdf").write_text(ET.tostring(tree, encoding="unicode"))
+    isaac_text = ET.tostring(tree, encoding="unicode")
+    (OUT_DIR / "f1_isaac.urdf").write_text(isaac_text)
+    # path-resolution check: every mesh filename must resolve relative to the URDF dir
+    _t = ET.fromstring(isaac_text)
+    _mesh_root = (WBT / "urdf").resolve()
+    (WBT / "urdf").mkdir(parents=True, exist_ok=True)
+    for _m in _t.iter("mesh"):
+        _fn = _m.get("filename")
+        _abs = (_mesh_root / _fn).resolve()
+        assert _abs.is_file(), f"Isaac URDF mesh not found: {_fn} -> {_abs}"
     stand_json = {n: float(v) for n, v in zip(JOINT_ORDER, q_stand)}
     stand_json["_order"] = "X1 sensor order (legs->lumbar->arms)"
     import json
@@ -421,7 +439,6 @@ def main():
     print(f"wrote {wrapper}")
 
     # ---- distribute: whole_body_tracking assets + GMR mocap (flat meshes dirs) ----
-    WBT = REPO / "whole_body_tracking/source/whole_body_tracking/whole_body_tracking/assets/f1"
     GMR_F1 = REPO / "GMR/assets/f1"
     (WBT / "mjcf/robot/f1").mkdir(parents=True, exist_ok=True)
     (WBT / "mjcf/environment").mkdir(parents=True, exist_ok=True)
