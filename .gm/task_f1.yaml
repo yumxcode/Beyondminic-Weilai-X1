@@ -91,3 +91,53 @@ retarget: >
   gates ALL PASS (quality_dance_f1_train.json), window [0,689) = 23 s.
 npz: "tools_csv_to_npz_f1_local.py — PhysX BFS body order, name-remapped npz"
 commits: ["4fc083b", "c92a10e", "8438929", "bbf543c", "9132f03", "ab927f1", "d4ed554"]
+
+# ---- TRAVEL DANCE: CMU 137 family (2026-11-06) ----
+travel_dance:
+  source: >
+    CMU 137_24 "Graceful Lady Walk" (stylistic runway walk). LAFAN dance ruled
+    out entirely (fnd_7af304ab: all high-travel segments are rolls/jumps).
+    1193f@120fps -> 299f@30fps (9.9s), human-root travel 4.73 m near-linear,
+    root-z std 0.018. New adapter tools_amc_to_lafan_frames.py +
+    tools_amc_csv_f1.py (ASF/AMC parse+FK, Y-up->GMR Z-up, yaw vote,
+    ground normalization, foot flattening for plantar flexion, ASF
+    bone-length segment scales).
+  gates: >
+    six gates PASS both csv and npz levels (ground -0.0124, self 0.078,
+    limits/vel 0, height [0.64,0.70] consistent with leg scale 0.717)
+  v1_task:
+    taskId: "TASK_20261105_558"
+    result: >
+      reward 23.3, ep_len 485, train anchor lag 0.47m. sim2sim: 5 loops zero
+      falls but travel retention 42% (1.54/3.70 m per loop, lag 2.2 m).
+      Root cause: base-class anchor termination is z-only -> horizontal lag
+      unpruned; sim2sim amplifies via OOD anchor_pos_b feedback (p95 3.9
+      sigma, all other obs segments in-distribution).
+  v2_task:
+    taskId: "TASK_20261106_006"
+    change: "F1FlatEnvCfg full-anchor termination 0.5m (only change)"
+    result: "reward 22.2, ep_len 467, train anchor lag 0.20m"
+  sim2sim_v2:
+    command: >
+      .venv/bin/python whole_body_tracking/scripts/play_mujoco.py --robot f1 --headless
+      --checkpoint trained_models/dance_f1_travel_v2_model_4999.pt
+      --motion whole_body_tracking/motions/cmu137_24_f1.npz --max_steps 2485
+    loops: 5 (2485 steps, 49.7 s)
+    fall_detected: false
+    travel_retention_per_loop: "3.60/3.70 m = 97% (v1: 42%)"
+    mean_anchor_pos_err_m: 0.115        # v1: 1.268 (-91%)
+    mean_body_pos_err_anchor_rel_m: 0.1085
+    mean_joint_pos_err_rad: 0.5017
+    min_base_z_m: 0.556
+    verdict: >
+      STABLE + TRACKS TRAVEL — zero falls over 5 loops with 97% root travel
+      retention and 0.115 m global anchor error.
+  models:
+    v1: "trained_models/dance_f1_travel_model_4999.pt (sha 74016eab)"
+    v2: "trained_models/dance_f1_travel_v2_model_4999.pt (sha 0b9804e0)"
+  videos:
+    reference: "cmu137_24_reference.mp4"
+    playback: "cmu137_24_playback.mp4"
+    compare: "cmu137_24_compare.mp4 (ref|policy)"
+  metrics_nnz: "whole_body_tracking/motions/sim2sim_cmu137_24_{,v2_}metrics.json.npz"
+  commit: "f90f8e4 + final deliverables commit"
