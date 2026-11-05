@@ -1,0 +1,93 @@
+# Gradmotion Training Task Configuration
+# BeyondMimic F1 (Weilai F1) 29DOF Dance Motion Tracking
+
+# ---- CURRENT: v1 full-obs (2026-11-05) ----
+project:
+  projectId: "PRO_20261105_081"
+  projectName: "Beyondminic-F1-Dance"
+  description: "F1 29DOF dance, 160-dim full obs (X1 v10/v11 recipe)"
+  account: "jiyow52926 (userId 4718)"
+
+task:
+  taskId: "TASK_20261105_430"
+  taskName: "beyondmimic-f1-dance-v1c"
+  status: 5  # finished
+  description: "F1 v1: full obs, dance_f1_train.npz (23s clean window from LAFAN dance1_subject3)"
+  note: >
+    v1 (TASK_20261105_423) failed: Isaac URDF mesh paths were flat names (MJCF
+    meshdir semantics) — IsaacLab resolves relative to the URDF file; fixed in
+    9132f03. v1b (TASK_20261105_427) failed: the platform harness auto-runs
+    pip install -e on the repo setup.py WITHOUT --no-deps; onnxscript cascaded
+    into numpy 2.2.6 and broke isaac-sim's numpy 1.26.4; fixed by emptying
+    INSTALL_REQUIRES (ab927f1). talare7232 account ran out of balance; switched
+    to jiyow52926. TASK_20261105_507 = joint-order probe (ground truth).
+
+resources:
+  goodsId: "ESKU000001"
+  goodsName: "1*4090D*24G"
+  imageId: "BJX00000028"       # IsaacSim:4.5 | IsaacLab:2.1.0
+  imageVersion: "V000127"
+  gpuNum: 1
+
+code:
+  repo: "https://github.com/yumxcode/Beyondminic-Weilai-X1.git"
+  branch: "main"
+  commit: "ab927f1"            # training; sim2sim fix d4ed554
+  mainCodeUri: "Beyondminic-Weilai-X1/whole_body_tracking/scripts/entry_f1_train.py"
+  startScript: >-
+    gm-run Beyondminic-Weilai-X1/whole_body_tracking/scripts/entry_f1_train.py
+    --task=Tracking-Flat-F1-v0 --motion_file motions/dance_f1_train.npz
+    --headless --num_envs 4096 --max_iterations 5000
+
+training:
+  iterations: 5000
+  numEnvs: 4096
+  motionFile: "motions/dance_f1_train.npz (689f@30 -> 1147f@50, LAFAN dance1_subject3 [0,689))"
+  paramChange: "first F1 training: robots/f1.py gains (F1 audit), Tracking-Flat-F1-v0 full obs"
+  startTime: "2026-11-05 17:27:15"
+  endTime: "2026-11-05 19:12:15"
+
+results:
+  finalReward: 35.33           # X1 v10/v11: 31.75/31.53 — F1 better
+  finalEpisodeLength: 483.38
+  error_body_pos: 0.055        # X1: 0.058/0.062
+  bestCheckpoint: 4999
+  modelFile: "trained_models/dance_f1_v1_model_4999.pt"
+  obsDim: 160                  # actor 160->512->256->128->29
+
+sim2sim:
+  command: >-
+    .venv/bin/python whole_body_tracking/scripts/play_mujoco.py --robot f1 --headless
+    --checkpoint trained_models/dance_f1_v1_model_4999.pt
+    --motion whole_body_tracking/motions/dance_f1_train.npz --max_steps 5735
+  loops: 5 (5735 steps, 114.7 s)
+  mean_joint_pos_err_rad: 0.2012      # X1 v10: 0.272 — F1 better
+  mean_body_pos_err_anchor_rel_m: 0.0553  # X1: 0.058 — parity/better
+  mean_body_pos_err_m: 0.1303         # X1: 0.121 — parity (global drift by design, full-obs policy follows reference travel)
+  mean_anchor_pos_err_m: 0.1201       # X1: 0.103
+  min_base_z_m: 0.568                 # standing 0.588; X1: 0.511
+  fall_detected: false
+  verdict: >-
+    STABLE — 5 full dance loops in MuJoCo with zero falls, joint tracking and
+    anchor-relative body tracking at or better than the X1 baseline.
+
+key_fixes:
+  physx_order: >
+    F1 PhysX joint order is FIFO-BFS over the URDF tree (shoulders before
+    knees/ankles within a wave) — differs from X1's alphabetical variant and
+    from the initial guess at 5 slots. Ground truth from probe task
+    TASK_20261105_507 (probe_f1_order.py). Wrong order made sim2sim collapse
+    in 0.2 s with obs z-score -23 sigma on the command segment.
+
+deployment:
+  kp/kd: per F1_29DOF/f1_kp_kd.json (legs from URDF inertia + estimated armature,
+    upper body X1 PlanB identified values); armature injected at play time.
+
+# ---- pipeline artifacts (F1) ----
+audit: "F1_29DOF/F1_AUDIT.md + f1_kp_kd.json (commit 4fc083b, rev2 c92a10e)"
+retarget: >
+  GMR ik configs (upper body reuses X1-calibrated entries where neutral frames
+  match; wrists/right arm recomputed + octahedral calibration), six quality
+  gates ALL PASS (quality_dance_f1_train.json), window [0,689) = 23 s.
+npz: "tools_csv_to_npz_f1_local.py — PhysX BFS body order, name-remapped npz"
+commits: ["4fc083b", "c92a10e", "8438929", "bbf543c", "9132f03", "ab927f1", "d4ed554"]
