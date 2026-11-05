@@ -1,0 +1,6 @@
+<mujoco model="f1 scene">
+
+    <include file="robot/f1/f1_serial.xml" />
+    <include file="environment/flat.xml" />
+
+</mujoco>

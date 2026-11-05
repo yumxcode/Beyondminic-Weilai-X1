@@ -33,3 +33,8 @@ tmp*.xml
 # Retargeting toolchain kept local-only (submodules break gradmotion clone)
 GMR/
 GVHMR/
+
+# F1 sim mesh intermediates (canonical flat copies live in F1_29DOF/mjcf/meshes
+# and whole_body_tracking assets; GMR dir is vendored/untracked)
+F1_29DOF/meshes/sim/
+F1_29DOF/mjcf/_f1_source.urdf
