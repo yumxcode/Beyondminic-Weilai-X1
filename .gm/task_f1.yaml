@@ -141,3 +141,64 @@ travel_dance:
     compare: "cmu137_24_compare.mp4 (ref|policy)"
   metrics_nnz: "whole_body_tracking/motions/sim2sim_cmu137_24_{,v2_}metrics.json.npz"
   commit: "f90f8e4 + final deliverables commit"
+
+# ---- DANCE v3: foot-clean + arm-rich source & arm saturation fix (2026-11-07) ----
+dance_v3:
+  problem_evidence:
+    feet: >
+      cmu137_24 reference motion: stance sole pitch +24~27 deg (tiptoe), roll
+      -25~-30 deg (everted), flat rate 0% — the source itself was a runway
+      walk with plantar flexion; six gates had no sole-posture check.
+    arms: >
+      dance_f1_train: wrists pinned at clamp limit 100% frames (ROM 0%),
+      R elbow pitch 99% frames at lower limit, R shoulder yaw 69%/roll 64%
+      saturated. v1 policy sim2sim arm err 0.2986 rad vs leg 0.1166 (2.6x).
+      Root cause: scaled hand target p95 0.415 m vs F1 arm reach 0.421 m —
+      whole-body IK pushes every arm joint to its limit. Weight softening
+      (v1/v2 variants) does NOT fix it.
+  fix: >
+    tools_bvh_to_csv_f1.py --arm_relock c3.0_r0.92 --clamp_margin 0.06:
+    per-arm secondary IK (FK-shoulder re-anchor + 0.92*reach clamp + center
+    posture relock, tools_arm_study_f1.py), arm-only clamp margin 0.06 rad.
+    Sat 100%->0%, wrist ROM 0%->9.6-78.5%, non-arm joints 0 drift.
+  gates: >
+    tools_check_motion_f1.py upgraded to 8 gates: +foot_flatness (stance
+    |sole pitch|<=10deg, |roll|<=8deg, >=90% flat) +arm_quality (any-joint
+    saturation <=10%, wrist ROM >=2%). tools_diag_foot_f1.py diagnostics.
+  source: >
+    dance2_subject1 BVH [255,706) = 451f@30fps (15 s). Source-level scan
+    (tools_scan_dance_sources.py): flat 98.1%, tiptoe 1.1%, toeout 24 deg,
+    armV 1.05 m/s (2.1x the v1 source). Retargeted: ALL 8 gates PASS
+    (ground -0.0128, foot flat 96.0/100%, arm sat 0%).
+  v3_task:
+    taskId: "TASK_20261107_132"
+    account: "gifahim182 (userId 4752, PRO_20261107_014)"
+    note: >
+      account pool was fully drained (5 accounts) mid-round; restored to 8.
+      New accounts must omit personalDataPath (ESKU000001 rejects personal
+      storage mount). 5000 iter, 90 min, code commit f71335c.
+  results:
+    finalReward: 35.58            # v1: 35.33
+    error_body_pos: 0.0416        # v1: 0.055 (-24%)
+    modelFile: "trained_models/dance_f1_v3_model_4999.pt (sha 0059705a)"
+  sim2sim_v3:
+    command: >
+      .venv/bin/python whole_body_tracking/scripts/play_mujoco.py --robot f1
+      --headless --checkpoint trained_models/dance_f1_v3_model_4999.pt
+      --motion whole_body_tracking/motions/dance2s1_arm_f1.npz --max_steps 3750
+    loops: 5 (3750 steps, 75 s)
+    fall_detected: false
+    mean_joint_pos_err_rad: 0.1315     # v1: 0.2012 (-35%)
+    mean_arm_joint_err_rad: 0.1724     # v1: 0.2986 (-42%)  <- stiff-arm fix
+    mean_leg_joint_err_rad: 0.0994     # v1: 0.1166 (-15%)
+    arm_to_leg_err_ratio: 1.73         # v1: 2.56
+    mean_body_pos_err_anchor_rel_m: 0.0461  # v1: 0.0553
+    min_base_z_m: 0.561
+    planted_slip_m_per_s: "L 0.018 / R 0.026 (v1: 0.021)"
+    contact_pct: "L 100 / R 99.5"
+  videos:
+    reference: "renders/dance2s1_arm_f1_reference.mp4"
+    playback: "renders/dance2s1_arm_playback.mp4 (5 loops)"
+    compare: "renders/dance2s1_arm_compare.mp4 (ref|policy, loop 1)"
+  metrics_nnz: "whole_body_tracking/motions/sim2sim_v3_armfoot.npz"
+  commits: ["99c99cd", "f71335c"]
