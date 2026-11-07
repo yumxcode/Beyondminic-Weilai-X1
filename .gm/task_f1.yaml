@@ -242,4 +242,43 @@ dance_v4:
       Same recipe as v3, motion_file=motions/dance2s1_ta_f1.npz (737f@50);
       full-anchor 0.5m termination default in F1FlatEnvCfg (travel-v2 exp).
     started: "2026-11-07 21:00"
-  deliverables_pending: sim2sim + videos + report
+  training_results:
+    finalMeanReward: 32.74           # v3: 35.58 (harder task: travel+arm)
+    error_body_pos_train: 0.0472     # v3: 0.0416
+    modelFile: "trained_models/dance_f1_v4_model_4999.pt (sha c2e60a0e)"
+    ended: "2026-11-07 22:42:43 (5000 iter, 102 min)"
+  sim2sim_v4:
+    command: >
+      .venv/bin/python whole_body_tracking/scripts/play_mujoco.py --robot f1
+      --headless --checkpoint trained_models/dance_f1_v4_model_4999.pt
+      --motion whole_body_tracking/motions/dance2s1_ta_f1.npz --max_steps 3685
+      --dump_metrics whole_body_tracking/motions/sim2sim_v4_travelarm.npz
+    loops: 5 (3685 steps, 73.7 s)
+    fall_detected: false
+    travel_retention_pct: 91.6       # robot 1.099 m / ref 1.199 m per loop (NEW)
+    xy_tracking_err_m: "mean 0.053 / p95 0.103 / max 0.126"
+    mean_joint_pos_err_rad: 0.1467   # v3: 0.1315 (+12%, harder task)
+    mean_arm_joint_err_rad: 0.2123   # v3: 0.1724 (+23%, ABOVE v3x1.1 gate 0.1896)
+    mean_leg_joint_err_rad: 0.0926   # v3: 0.0994 (-7%)
+    arm_to_leg_err_ratio: 2.29       # v3: 1.73
+    mean_anchor_pos_err_m: 0.0531    # better than v3 0.0553 despite travel
+    mean_body_pos_err_anchor_rel_m: 0.0366  # v3: 0.0461 (-21%)
+    min_base_z_m: 0.554
+    planted_slip_m_per_s: "L 0.101 / R 0.050 (v3: 0.018/0.026; stepping dance)"
+    contact_pct: "L 98.5 / R 97.8"
+    arm_err_note: >
+      arm err correlates NEGATIVELY with reference arm speed (corr -0.52;
+      bottom-quartile-speed frames 0.331 rad vs top 0.151) - the error lives in
+      hold-arm-while-walking coordination, not arm amplitude. Still -29% vs v1
+      saturated baseline 0.2986. Pre-registered arm-err gate FAILED (honest
+      record; see exp_3d108120 conclusion).
+  videos:
+    reference: "renders/dance2s1_ta_f1_reference.mp4"
+    playback: "renders/dance2s1_ta_playback.mp4 (5 loops)"
+    compare: "renders/dance2s1_ta_compare.mp4 (ref|policy, loop 1)"
+  metrics_nnz: "whole_body_tracking/motions/sim2sim_v4_travelarm.npz"
+  verdict: >
+    exp_3d108120 = falsified per pre-registration (dance2s3 window gate-failed;
+    arm err above v3x1.1). Engineering goal DELIVERED: two-in-one source
+    trained, 5-loop zero falls, travel retention 91.6%.
+  commits: ["7433312", "65218b6"]
