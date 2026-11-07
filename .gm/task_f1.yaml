@@ -202,3 +202,44 @@ dance_v3:
     compare: "renders/dance2s1_arm_compare.mp4 (ref|policy, loop 1)"
   metrics_nnz: "whole_body_tracking/motions/sim2sim_v3_armfoot.npz"
   commits: ["99c99cd", "f71335c"]
+
+# ---- DANCE v4: travel + arm-rich source (2026-11-07) ----
+dance_v4:
+  goal: >
+    "上肢丰富 + 脚步移动/步伐明显" two-in-one source, same v3 pipeline
+    (arm_relock c3.0_r0.92 + clamp 0.06), 8 gates all-pass, v3-recipe training.
+  source_scan: >
+    CMU 137 family re-scanned at win300 (04/16/38 ruled out: armV 0.09-0.43,
+    sole pitch -46~-24 or tiptoe 100%). LAFAN walk/run/sprint/aiming: armV
+    <=0.79. dance2_subject3 [4300,4900): travel 2.7-4.3m + armV 1.10-1.25 BUT
+    retarget dies at gates (src flat ceiling 90.2% -> 89.5/85.7%; right
+    wrist-torso -5.2cm penetration). Full-library 15s joint scan
+    (flat>=92 & tiptoe<=6 & armV>=1.0 & travel>=1.8) => exactly ONE window:
+    dance2_subject1 [360,810). Pareto fine scan [255,870) shows the flat<->travel
+    gradient; [345,795) is the knee point.
+  correction: >
+    fnd_7af304ab marked STALE: tools_scan_ground_windows.py misread the raw BVH
+    3rd root channel as height (yaw-coupled ghost z; pit_94a45937). GMR FK
+    frames (the actual retarget input) show dance2s3 [4350,5100) root z_std
+    0.05 with 4.0m travel - a clean traveling window by that metric (still
+    gate-fails on foot flatness / self-penetration, so the ruling stands on
+    measured evidence, not the misread scan).
+  retarget: >
+    dance2_subject1 [352,795) = 443f@30 (14.8s). Source: flat 95.0%, tiptoe
+    2.7%, travel 1.82m (~9x v3 window), armV 1.14 (1.09x v3), armVol 0.0051.
+    v3 pipeline + NEW tools_lift_ground_f1.py: trim 7 IK-settling frames +
+    Gaussian root-z bump on 9 step-landing frames (max 7.4mm; joints/foot
+    posture untouched; source itself never penetrates - artifact of scaled
+    F1 sole vs human-foot ground normalization). 8 GATES ALL PASS:
+    ground -0.0130 / self 0.0331 / limits 0 / vel 0 / height / continuity /
+    foot flat L 90.6 R 94.0 / arm sat 0%, wrist ROM 11.8%.
+  v4_task:
+    taskId: "TASK_20261107_199"
+    account: "gifahim182 (userId 4752, PRO_20261107_014)"
+    note: >
+      accounts 58/59 (talare7232/jiyow52926) had zero balance (TASK_197/198
+      dead, unrun); reused v3 account gifahim182. Code commit 7433312.
+      Same recipe as v3, motion_file=motions/dance2s1_ta_f1.npz (737f@50);
+      full-anchor 0.5m termination default in F1FlatEnvCfg (travel-v2 exp).
+    started: "2026-11-07 21:00"
+  deliverables_pending: sim2sim + videos + report
