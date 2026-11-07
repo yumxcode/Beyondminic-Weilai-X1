@@ -827,7 +827,31 @@ def main():
         "body_pos_err": [], "joint_pos_err": [], "anchor_pos_err": [],
         "body_pos_err_rel": [],
         "base_z": [], "steps": 0, "robot_xy": [], "ref_xy": [], "ref_anchor_z": [], "robot_anchor_z": [],
+        "arm_joint_err": [], "leg_joint_err": [],
+        "left_contact": [], "right_contact": [],
+        "left_foot_xy": [], "right_foot_xy": [],
     }
+
+    # v3 metrics: arm/leg joint-error decomposition + foot contact/slip.
+    # Sole corners in the ankle_roll body frame (see F1_AUDIT.md / gate 7).
+    ROBOT_FOOT_CORNERS = {
+        "f1": [(-0.0967, -0.0395, -0.0337), (0.1071, -0.0395, -0.0337),
+               (-0.0967, 0.0365, -0.0337), (0.1071, 0.0365, -0.0337)],
+    }
+    ARM_IDX = [i for i, n in enumerate(joint_names_dof)
+               if any(t in n for t in ("shoulder", "elbow", "wrist"))]
+    LEG_IDX = [i for i, n in enumerate(joint_names_dof)
+               if any(t in n for t in ("hip", "knee", "ankle"))]
+    foot_bodies = {}
+    if args.robot in ROBOT_FOOT_CORNERS:
+        for side in ("left", "right"):
+            try:
+                foot_bodies[side] = model.body(f"{side}_ankle_roll").id
+            except Exception:
+                pass
+    if foot_bodies:
+        print(f"[metrics] v3 arm/leg decomposition ({len(ARM_IDX)} arm / {len(LEG_IDX)} leg joints) "
+              f"+ foot contact/slip for {args.robot}")
 
     # ── Optional offscreen video recording (headless mode only) ────────
     recorder = None
@@ -925,6 +949,17 @@ def main():
                 robot_body_pos_w - ref_body_rel_w, axis=1))))
             metrics["joint_pos_err"].append(float(np.mean(np.abs(
                 np.array([data.qpos[adr] for adr in joint_qpos_adr]) - ref_jpos))))
+            jpos_now = np.array([data.qpos[adr] for adr in joint_qpos_adr])
+            if ARM_IDX:
+                metrics["arm_joint_err"].append(float(np.mean(np.abs(
+                    jpos_now[ARM_IDX] - ref_jpos[ARM_IDX]))))
+                metrics["leg_joint_err"].append(float(np.mean(np.abs(
+                    jpos_now[LEG_IDX] - ref_jpos[LEG_IDX]))))
+            for side, bid in foot_bodies.items():
+                R = data.xmat[bid].reshape(3, 3)
+                cz = [ (data.xpos[bid] + R @ np.array(c))[2] for c in ROBOT_FOOT_CORNERS[args.robot]]
+                metrics[f"{side}_contact"].append(min(cz) < 0.02)
+                metrics[f"{side}_foot_xy"].append(data.xpos[bid][:2].copy())
             metrics["anchor_pos_err"].append(float(np.linalg.norm(anchor_pos_b)))
             metrics["base_z"].append(float(data.qpos[2]))
             metrics["robot_xy"].append(data.qpos[0:2].copy())
@@ -953,6 +988,22 @@ def main():
             recorder["writer"].close()
             print(f"[record] Video saved: {args.record} ({metrics['steps']} frames)")
         base_z = np.array(metrics["base_z"])
+        pdt = POLICY_DT
+        foot_summary = {}
+        for side in ("left", "right"):
+            if metrics.get(f"{side}_contact"):
+                contact = np.array(metrics[f"{side}_contact"])
+                fxy = np.array(metrics[f"{side}_foot_xy"])
+                if len(fxy) > 1:
+                    vxy = np.linalg.norm(np.diff(fxy, axis=0), axis=1) / pdt
+                    c_mask = contact[:-1] & contact[1:]  # planted over both steps
+                    slip = float(vxy[c_mask].mean()) if c_mask.any() else 0.0
+                    slip_p95 = float(np.percentile(vxy[c_mask], 95)) if c_mask.any() else 0.0
+                    foot_summary[side] = {
+                        "contact_pct": round(float(contact.mean() * 100), 1),
+                        "planted_slip_m_per_s": round(slip, 3),
+                        "planted_slip_p95_m_per_s": round(slip_p95, 3),
+                    }
         if "zscore_buf" in metrics and metrics["zscore_buf"]:
             zs = np.abs(np.stack(metrics["zscore_buf"]))  # (T, obs_dim)
             zs = zs.reshape(zs.shape[0], -1)
@@ -980,6 +1031,12 @@ def main():
                 ref_xy=np.array(metrics["ref_xy"]),
                 robot_anchor_z=np.array(metrics["robot_anchor_z"]),
                 ref_anchor_z=np.array(metrics["ref_anchor_z"]),
+                arm_joint_err=np.array(metrics["arm_joint_err"]),
+                leg_joint_err=np.array(metrics["leg_joint_err"]),
+                left_contact=np.array(metrics["left_contact"]),
+                right_contact=np.array(metrics["right_contact"]),
+                left_foot_xy=np.array(metrics["left_foot_xy"]),
+                right_foot_xy=np.array(metrics["right_foot_xy"]),
             )
             print(f"[metrics] dumped to {args.dump_metrics}")
         summary = {
@@ -993,6 +1050,11 @@ def main():
             "min_base_z_m": round(float(base_z.min()), 3),
             "fall_detected": bool(base_z.min() < 0.30),
         }
+        if metrics["arm_joint_err"]:
+            summary["mean_arm_joint_err_rad"] = round(float(np.mean(metrics["arm_joint_err"])), 4)
+            summary["mean_leg_joint_err_rad"] = round(float(np.mean(metrics["leg_joint_err"])), 4)
+        for side, fs in foot_summary.items():
+            summary[f"{side}_foot"] = fs
         print("\n[sim2sim] " + _json.dumps(summary, indent=2))
         return
 
