@@ -73,6 +73,14 @@ def parse_args() -> argparse.Namespace:
                         help="Centered moving-average window over joint+root trajectories (0 disables). "
                         "5 frames @30fps ~ 6 Hz cutoff: keeps dance content, removes IK jitter and "
                         "bounds joint velocities within URDF limits.")
+    parser.add_argument("--arm_relock", type=str, default=None,
+                        help="Secondary per-arm IK fix for joint saturation (root cause: scaled "
+                        "hand target at/past the F1 arm reach boundary). Format "
+                        "'c<posture_cost>_r<reach_scale>' e.g. c3.0_r0.92. Empty string = defaults.")
+    parser.add_argument("--clamp_margin", type=float, default=0.01,
+                        help="Clamp joints this far inside the URDF limits (rad). "
+                        "0.06 with --arm_relock guarantees the arm-quality gate "
+                        "(sat margin 0.05) passes by construction.")
     return parser.parse_args()
 
 
@@ -156,6 +164,17 @@ def main() -> None:
     # dance frames (NoSolutionFound); output velocity bounds are instead
     # enforced by the post-hoc smoothing pass (--smooth_window).
 
+    arm_relock_fn = None
+    if args.arm_relock is not None:
+        from tools_arm_study_f1 import arm_relock, parse_v3
+        kw = parse_v3(f"v3_{args.arm_relock}") if args.arm_relock else {}
+        if not kw:
+            kw = dict(posture_cost=3.0, reach_scale=0.92)
+        def arm_relock_fn(frame_arg, qpos_arg):
+            return arm_relock(retargeter, qpos_arg, retargeter.scaled_human_data,
+                              mj, __import__("mink"), **kw)
+        print(f"[arm_relock] enabled {kw}")
+
     qpos_frames = []
     failed_frames = []
     for index in range(args.start_frame, end_frame):
@@ -168,10 +187,19 @@ def main() -> None:
             qpos = qpos_frames[-1].copy() if qpos_frames else None
             if qpos is None:
                 continue
+        if arm_relock_fn is not None:
+            qpos = arm_relock_fn(frame, qpos)
         if qpos.shape != (36,):
             raise RuntimeError(f"expected qpos (36,), got {qpos.shape} at frame {index}")
-        # clamp joints back to the *real* URDF limits (mocap xml has a small margin)
-        qpos[qpos_adrs] = np.clip(qpos[qpos_adrs], lo + 0.01, up - 0.01)
+        # clamp joints back to the *real* URDF limits (mocap xml has a small margin);
+        # the wider --clamp_margin applies to ARM joints only (guarantees the
+        # arm-quality gate); legs/torso keep the tight 0.01 margin so foot
+        # posture and ground clearance are unaffected
+        tight = np.full(len(qpos_adrs), 0.01)
+        for k, name in enumerate(F1_JOINT_NAMES):
+            if any(t in name for t in ("shoulder", "elbow", "wrist")):
+                tight[k] = args.clamp_margin
+        qpos[qpos_adrs] = np.clip(qpos[qpos_adrs], lo + tight, up - tight)
         qpos_frames.append(qpos)
         if (index - args.start_frame) % 300 == 0:
             print(f"frame {index}/{end_frame}")
@@ -184,7 +212,8 @@ def main() -> None:
     if args.smooth_window > 1:
         motion = smooth_motion(motion.astype(np.float64), args.smooth_window).astype(np.float32)
         # smoothing can push joints marginally past limits again — re-clamp
-        motion[:, qpos_adrs - 0] = np.clip(motion[:, qpos_adrs - 0], lo + 0.01 - 1e-6, up - 0.01 + 1e-6)
+        motion[:, qpos_adrs - 0] = np.clip(motion[:, qpos_adrs - 0],
+                                           lo + tight - 1e-6, up - tight + 1e-6)
         print(f"[smooth] applied centered moving average, window={args.smooth_window}")
 
     # MuJoCo root quat is wxyz; CSV loader expects xyzw

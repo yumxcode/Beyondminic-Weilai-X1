@@ -12,7 +12,23 @@ gate), with F1 geometry:
   4. joint_velocities    — URDF velocity limits (wrist 2.0x transient margin)
   5. root_height_sanity  — band [0.35, 1.0] m (F1 standing base z ≈ 0.59)
   6. continuity          — finite values, continuous root quaternion
+  7. foot_flatness       — stance frames (contact run >= --stance_min_frames):
+                           |sole pitch| <= --pitch_lim and |sole roll| <=
+                           --roll_lim for >= --flat_min_pct of stance frames.
+                           sole pitch: heel-toe height diff over foot length
+                           (+ = heel up = tiptoe); roll: medial-lateral over
+                           foot width (+ = inversion). Calibrated on the
+                           verified-clean dance_f1_train (96-98% flat) vs the
+                           rejected tiptoe/everted cmu137_24 (0% flat).
+  8. arm_quality         — arm joints within --arm_sat_margin of a URDF limit
+                           for <= --arm_sat_max_pct of frames; no wrist joint
+                           pinned (ROM >= --arm_dead_rom_pct of its range).
+                           Fixes the "stiff arms" root cause: IK end-effector
+                           weights saturating joints (see tools_arm_study_f1.py).
   + jerk report (advisory, not gating)
+
+Gates 7-8 are on by default; pass --no_extra_gates to reproduce the legacy
+six-gate behavior.
 
 Usage:
     python tools_check_motion_f1.py --csv motions/csv/dance1_subject3_f1.csv --fps 30
@@ -57,6 +73,10 @@ FOOT_CORNERS = {
               (-0.0967, 0.0395, -0.0337), (0.1071, 0.0395, -0.0337)],
 }
 FOOT_SPHERE_R = 0.002  # matches the sim contact spheres
+FOOT_LEN = 0.1071 - (-0.0967)  # m, heel->toe
+FOOT_WID = 0.076                  # m, medial<->lateral
+ARM_JOINT_IDX = [i for i, n in enumerate(F1_JOINT_NAMES)
+                 if any(t in n for t in ("shoulder", "elbow", "wrist"))]
 
 # F1 leg body names lack the _link suffix
 def B(name: str) -> str:
@@ -134,6 +154,24 @@ def main():
     ap.add_argument("--vel_margin", type=float, default=1.5)
     ap.add_argument("--height_range", type=float, nargs=2, default=(0.35, 1.0))
     ap.add_argument("--stride", type=int, default=1)
+    ap.add_argument("--contact_h", type=float, default=0.03,
+                    help="gate 7: lowest sole corner below this = contact (m)")
+    ap.add_argument("--stance_min_frames", type=int, default=5,
+                    help="gate 7: contact run length for stance phase")
+    ap.add_argument("--pitch_lim", type=float, default=10.0,
+                    help="gate 7: stance |sole pitch| limit (deg)")
+    ap.add_argument("--roll_lim", type=float, default=8.0,
+                    help="gate 7: stance |sole roll| limit (deg)")
+    ap.add_argument("--flat_min_pct", type=float, default=90.0,
+                    help="gate 7: min flat stance frames (%%)")
+    ap.add_argument("--arm_sat_margin", type=float, default=0.05,
+                    help="gate 8: within this of a limit = saturated (rad)")
+    ap.add_argument("--arm_sat_max_pct", type=float, default=10.0,
+                    help="gate 8: max frames with any arm joint saturated (%%)")
+    ap.add_argument("--arm_dead_rom_pct", type=float, default=2.0,
+                    help="gate 8: min wrist ROM as %% of range (anti-pinning)")
+    ap.add_argument("--no_extra_gates", action="store_true",
+                    help="disable gates 7-8 (legacy six-gate behavior)")
     ap.add_argument("--json_out", type=Path, default=None)
     ap.add_argument("--scan_windows", action="store_true")
     ap.add_argument("--min_window", type=int, default=600)
@@ -184,6 +222,8 @@ def main():
     min_self, min_self_pair, min_self_frame = np.inf, None, -1
     limit_viol = []
     root_min, root_max = np.inf, -np.inf
+    # gate 7 bookkeeping: per-frame sole corner z per side
+    sole_z = {s: np.full((n_frames, 4), np.nan) for s in ("left", "right")}
 
     quat_ok = True
     prev = root_quat[0] / np.linalg.norm(root_quat[0])
@@ -211,8 +251,9 @@ def main():
         for side in ("left", "right"):
             bid = body_id[f"{side}_ankle_roll_link"]
             R = data.xmat[bid].reshape(3, 3)
-            for s in FOOT_CORNERS[side]:
+            for k, s in enumerate(FOOT_CORNERS[side]):
                 p = data.xpos[bid] + R @ np.array(s)
+                sole_z[side][f, k] = p[2]
                 z = p[2] - FOOT_SPHERE_R
                 if z < min_ground:
                     min_ground, min_ground_frame = z, f
@@ -251,6 +292,77 @@ def main():
     # jerk (advisory): second-difference angular acceleration, rad/s^2
     acc = np.abs(np.diff(joints, n=2, axis=0)) / dt**2
     jerk_max = float(np.max(acc)) if len(acc) else 0.0
+
+    # ---- gate 7: foot flatness over stance frames --------------------------
+    foot_rep = {"gating": not args.no_extra_gates}
+    if not args.no_extra_gates:
+        side_flat = {}
+        for side in ("left", "right"):
+            cz = sole_z[side]
+            contact = cz.min(axis=1) < args.contact_h
+            # stance = contact run >= stance_min_frames
+            stance = np.zeros(n_frames, dtype=bool)
+            i = 0
+            while i < n_frames:
+                if contact[i]:
+                    j = i
+                    while j < n_frames and contact[j]:
+                        j += 1
+                    if j - i >= args.stance_min_frames:
+                        stance[i:j] = True
+                    i = j
+                else:
+                    i += 1
+            use = stance if stance.sum() >= 10 else contact
+            phase = "stance" if stance.sum() >= 10 else "contact"
+            heel = cz[:, [0, 2]].mean(axis=1)
+            toe = cz[:, [1, 3]].mean(axis=1)
+            medial = cz[:, [2, 3]].mean(axis=1)
+            lateral = cz[:, [0, 1]].mean(axis=1)
+            pitch = np.degrees(np.arctan2(heel - toe, FOOT_LEN))
+            roll = np.degrees(np.arctan2(medial - lateral, FOOT_WID))
+            flat = (np.abs(pitch[use]) <= args.pitch_lim) & (np.abs(roll[use]) <= args.roll_lim)
+            flat_pct = float(flat.mean() * 100) if len(use) else 0.0
+            side_flat[side] = {
+                "phase": phase, "frames": int(use.sum()),
+                "flat_pct": flat_pct,
+                "pitch_p95_deg": float(np.percentile(np.abs(pitch[use]), 95)) if use.any() else None,
+                "roll_p95_deg": float(np.percentile(np.abs(roll[use]), 95)) if use.any() else None,
+                "pass": flat_pct >= args.flat_min_pct and use.sum() >= 10,
+            }
+        foot_rep.update({
+            "thresholds": {"pitch_deg": args.pitch_lim, "roll_deg": args.roll_lim,
+                           "flat_min_pct": args.flat_min_pct, "contact_h": args.contact_h},
+            "left": side_flat["left"], "right": side_flat["right"],
+            "pass": side_flat["left"]["pass"] and side_flat["right"]["pass"],
+        })
+
+    # ---- gate 8: arm quality (saturation + wrist pinning) ------------------
+    arm_rep = {"gating": not args.no_extra_gates}
+    if not args.no_extra_gates:
+        arm_j = joints[:, ARM_JOINT_IDX]
+        arm_names = [F1_JOINT_NAMES[i] for i in ARM_JOINT_IDX]
+        alo = np.array([limits[n][0] for n in arm_names])
+        aup = np.array([limits[n][1] for n in arm_names])
+        sat = (arm_j <= alo[None, :] + args.arm_sat_margin) | (arm_j >= aup[None, :] - args.arm_sat_margin)
+        any_sat_pct = float(sat.any(axis=1).mean() * 100)
+        worst = sorted(((float(sat[:, k].mean() * 100), arm_names[k])
+                        for k in range(len(arm_names))), reverse=True)[:5]
+        wrist_roms = {}
+        for k, n in enumerate(arm_names):
+            if "wrist" not in n:
+                continue
+            rom_pct = float((np.percentile(arm_j[:, k], 95) - np.percentile(arm_j[:, k], 5))
+                            / (aup[k] - alo[k]) * 100)
+            wrist_roms[n] = rom_pct
+        arm_rep.update({
+            "any_sat_pct": any_sat_pct,
+            "max_sat_pct": args.arm_sat_max_pct,
+            "worst_joints": [{"joint": n, "sat_pct": s} for s, n in worst if s > 0],
+            "wrist_rom_pct": wrist_roms,
+            "pass": (any_sat_pct <= args.arm_sat_max_pct
+                     and all(v >= args.arm_dead_rom_pct for v in wrist_roms.values())),
+        })
 
     if args.scan_windows:
         best_len, best_start, cur_len, cur_start = 0, 0, 0, 0
@@ -293,12 +405,17 @@ def main():
                         "band": list(args.height_range),
                         "pass": bool(args.height_range[0] <= root_min and root_max <= args.height_range[1])},
         "continuity": {"pass": bool(quat_ok and finite_ok), "quat_continuous": quat_ok, "finite": finite_ok},
+        "foot_flatness": foot_rep,
+        "arm_quality": arm_rep,
         "jerk_advisory": {"max_ang_acc_rad_s2": jerk_max, "gating": False},
         "overall_pass": None,
     }
+    extra_pass = (report["foot_flatness"]["pass"] and report["arm_quality"]["pass"]) \
+        if not args.no_extra_gates else True
     report["overall_pass"] = bool(report["ground"]["pass"] and report["self_penetration"]["pass"]
                                   and report["joint_limits"]["pass"] and report["joint_velocities"]["pass"]
-                                  and report["root_height"]["pass"] and report["continuity"]["pass"])
+                                  and report["root_height"]["pass"] and report["continuity"]["pass"]
+                                  and extra_pass)
     print(json.dumps(report, indent=2, default=str))
     if args.json_out:
         args.json_out.write_text(json.dumps(report, indent=2, default=str))
